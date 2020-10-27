@@ -78,7 +78,7 @@ static int sopunate_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 if(t[k] == '0')
                     vecNcount[k]++;
             }
-            t = strtok(NULL, " \n");
+            t = strtok(NULL, "\n");
             if(t == NULL)
                 break;
         }
