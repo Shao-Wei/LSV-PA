@@ -66,6 +66,9 @@ static int sopunate_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
             vecNcount.push_back(0);
         }
 
+        if(vecInput.size() == 0)
+            continue;
+
         buff = (char*)pObj->pData;
         t = strtok(buff, "\n");
         fOutput = (t[vecInput.size()+1] == '1');
