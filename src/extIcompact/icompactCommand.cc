@@ -2,9 +2,13 @@
 #include "base/abc/abc.h"
 #include "base/main/main.h"
 #include "base/main/mainInt.h"
+#include "base/io/ioAbc.h"
 #include <vector>
 
 ABC_NAMESPACE_IMPL_START
+
+// base/abci/abcStrash.c
+extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
 
 enum SolvingType {
     HEURISTIC_SINGLE = 0,
@@ -38,23 +42,14 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fNpattern    = 0;
 
     Abc_Ntk_t* pNtk;
-    FILE *fPatterns;
-    char Command[1000];
-    char *blifFileName;
-    char *caresetFileName;
-    char *samplesFileName;
-    char samplesPLAFileName[1000];
+    char *blifFileName, *caresetFileName, *samplesFileName;
     int nPi, nPo;
-        
+    
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "icnovh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "cnvh" ) ) != EOF )
     {
         switch ( c )
         {            
-            case 'i':
-                blifFileName = argv[globalUtilOptind];
-                globalUtilOptind++;
-                break;
             case 'c':
                 fCube ^= 1;
                 fNcube = atoi(argv[globalUtilOptind]);
@@ -62,12 +57,6 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 break;
             case 'n':
                 fNpattern = atoi(argv[globalUtilOptind]);
-                globalUtilOptind++;
-                break;
-            case 'o':
-                caresetFileName = argv[globalUtilOptind];
-                globalUtilOptind++;
-                samplesFileName = argv[globalUtilOptind];
                 globalUtilOptind++;
                 break;
             case 'v':
@@ -79,55 +68,59 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 goto usage;
         }
     }
-
-    printf("[Info] Start gen careset\nBlif: %s\n", blifFileName);
-
-    // get nPi
-    sprintf( Command, "read %s; strash", blifFileName);
-    if(Cmd_CommandExecute(pAbc,Command))
+    if ( argc != globalUtilOptind + 3 )
     {
-        printf("Cannot read %s\n", blifFileName);
-        return 1;
+        printf("Missing arguements..\n");
+        goto usage;
     }
-    pNtk = Abc_FrameReadNtk(pAbc);
+    blifFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+    caresetFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+    samplesFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+
+    printf("[Info] Start generated careset\n");
+    // get nPi
+    pNtk = Io_ReadBlif(blifFileName, 1);
+    pNtk = Abc_NtkToLogic(pNtk);
+    pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     nPi = Abc_NtkPiNum(pNtk);
     nPo = Abc_NtkPoNum(pNtk);
-    
+    // BUG - reg count non-zero while no latch exists - fails assertion in Fra_SmlSimulateCombGiven()
+    // printf("reg = %i\n", Aig_ManRegNum((Aig_Man_t*)pNtk->pManFunc));
+
     // gen careset
-    printf("Gen careset\n");
+    printf("Generate careset file\n");
     if(!fCube)
         n_gen_Random(fNpattern, nPi, nPo, caresetFileName);
     else
         n_gen_Cube(fNpattern, fNcube, nPi, nPo, caresetFileName);
 
     // gen sampling
-    printf("Gen sampling file\n");
-    sprintf(samplesPLAFileName, "%s.samples.pla", samplesFileName);
-    fPatterns = fopen(samplesPLAFileName, "w");
-    fprintf(fPatterns, ".i %i\n", nPi);
-    fprintf(fPatterns, ".o %i\n", nPo);
-    fprintf(fPatterns, ".type fr\n");
-    fclose(fPatterns);
-
+    printf("Generate sampling file\n");
     if(careset2patterns(samplesFileName, caresetFileName, nPi, nPo))
     {
-        fprintf( stdout, "Careset incorrect or too large for pattern simulation. Blackbox Input Compaction lacks input. Aborted\n");
+        fprintf( stdout, "Careset incorrect or too large for pattern simulation. Aborted\n");
         return 1;
     }
-    sprintf( Command, "sim -A %s", samplesFileName); // sim command dump results to samplesFileName.samples.pla
-    if ( Cmd_CommandExecute( pAbc, Command ) )
+
+    c = smlSimulateCombGiven( pNtk, samplesFileName);
+    if ( c )
     {
-        fprintf( stdout, "failed at simulation");
+        fprintf( stdout, "failed at simulation\n");
         return 1;
     }
 
     return result;
     
 usage:
-    Abc_Print( -2, "usage: gencareset -i benchmark.blif -c cube_num -n minterm_num -o careset.pla samples\n" );
-    Abc_Print( -2, "\t              generate random careset in pla format type fr\n" );
-    Abc_Print( -2, "\t-v            : verbosity [default = %d]\n", fVerbose );
-    Abc_Print( -2, "\t-h            : print the command usage\n" );
+    Abc_Print( -2, "usage: gencareset [options] <benchmark.blif> <careset.pla> <samples_header>\n" );
+    Abc_Print( -2, "\t               generate random careset in pla format type fr\n" );
+    Abc_Print( -2, "\t-c cube_num    : set number of cubes [default = %d]\n", fNcube );
+    Abc_Print( -2, "\t-n minterm_num : set number of minterms to generate [default = %d]\n", fNpattern );    
+    Abc_Print( -2, "\t-v             : verbosity [default = %d]\n", fVerbose );
+    Abc_Print( -2, "\t-h             : print the command usage\n" );
     return 1;   
 }
 
@@ -152,6 +145,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fLog                 = 0;
     int fBatch               = 1;
     int fSupport             = 0;
+    int fEach                = 0;
 
     // == Overall declaration ================
     char *funcFileName;
@@ -216,10 +210,13 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     
     // == Parse command ======================
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "osmlnycrpvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "eosmlnycrpvh" ) ) != EOF )
     {
         switch ( c )
         {            
+            case 'e': // for experiment only
+                fEach ^= 1;
+                break;
             case 'o':
                 fOutput = atoi(argv[globalUtilOptind]);
                 globalUtilOptind++;
@@ -622,7 +619,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
         pNtk_omap = get_part_ntk(pAbc, outputmappingFileName, "Output mapping", gate_omap, time_omap, nRPo, nPo, recordPo);
 
     ////////////////////////////////////////////////////////
-    if(fLog)
+    if(fLog && !fEach)
     {
         fresultlog = fopen(resultlogFileName, "a");
         if(fSolving == REENCODE)
@@ -631,6 +628,33 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
             fprintf( fresultlog, "%s,%i,%i,    -, -,    -,%i,%9.2f, -, -,    -, -,    -,\n", funcFileName, fSolving, result,                                      gate_core, time_core                                                     );    
         else
             fprintf( fresultlog, "%s,%i,%i,%9.2f, -,    -,%i,%9.2f,%i,%i,%9.2f,%i,%9.2f,\n", funcFileName, fSolving, result, time_icompact,                       gate_core, time_core, fNewVar, nRPo, time_oreencode, gate_omap, time_omap);    
+        fclose(fresultlog);
+    }
+
+    if(fEach) // report size of cone of each PO
+    {
+        fresultlog = fopen(resultlogFileName, "a");
+        // original cone size
+        fprintf(fresultlog, "pNtk_func");
+        Abc_Ntk_t* pCone;
+        Abc_Obj_t* pPo;
+        int i;
+        Abc_NtkForEachCi(pNtk_func, pPo, i)
+        {
+            pCone = Abc_NtkCreateCone(pNtk_func, pPo, Abc_ObjName(pPo), 0);
+            fprintf(fresultlog, ",%i", Abc_NtkNodeNum(pCone));
+        }
+        fprintf(fresultlog, "\n");
+
+        // compacted cone size
+        Abc_Ntk_t* pPutOnTop;
+        pPutOnTop = Abc_NtkPutOnTop(pNtk_core, pNtk_omap);
+        Abc_NtkForEachCi(pPutOnTop, pPo, i)
+        {
+            pCone = Abc_NtkCreateCone(pPutOnTop, pPo, Abc_ObjName(pPo), 0);
+            fprintf(fresultlog, ",%i", Abc_NtkNodeNum(pCone));
+        }
+        fprintf(fresultlog, "\n");
         fclose(fresultlog);
     }
 

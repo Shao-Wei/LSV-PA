@@ -21,8 +21,8 @@ ABC_NAMESPACE_HEADER_START
 
 extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
 
-// icompact.cpp
 extern int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
+extern int careset2patterns_r(char* patternsFileName, char* caresetFilename, int nPi);
 extern void writeCompactpla(char* outputplaFileName, char* patternFileName, int nPi, bool* litPi, int nPo, bool* litPo, int idx);
 extern int espresso_input_count(char* filename);
 extern Abc_Ntk_t* get_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time);
@@ -44,6 +44,7 @@ extern void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo);
 extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int nLits, int nConfLimit);
 
 // icompactGencareset.cpp
+int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
 extern void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
 extern void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
 extern void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
