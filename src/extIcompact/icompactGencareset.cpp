@@ -9,6 +9,12 @@ ABC_NAMESPACE_IMPL_START
 // Simulation 
 // Modified from fraSim.c to support 1. simulation results written to file, 2. simulation accuracy report
 /////////////////////////////////////////////////////////
+/*== base/abci/abcDar.c ==*/
+extern "C" { Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters); }
+/*== proof/fra/fraSim.c ==*/
+extern "C" { Vec_Str_t * Fra_SmlSimulateReadFile( char * pFileName ); }
+extern "C" { void Fra_SmlSimulateOne( Fra_Sml_t * p ); }
+
 int smlWriteGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, char* pfilename)
 {
     int k, i;
@@ -63,10 +69,6 @@ void smlInitializeGiven( Fra_Sml_t * p, Vec_Str_t * vSimInfo )
     }
 }
 
-extern "C" { Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters); }
-extern "C" { Vec_Str_t * Fra_SmlSimulateReadFile( char * pFileName ); }
-extern "C" { void Fra_SmlSimulateOne( Fra_Sml_t * p ); }
-
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
 int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
 {
@@ -76,7 +78,8 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     FILE* fSamples;
     int nPatterns, nPart, nPatPerSim;
     int patLen;
-    int cFlag;
+    int cFlag, i;
+    Abc_Obj_t * pObj;
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
 
     // read comb patterns from file
@@ -102,7 +105,13 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     fSamples = fopen(pFileName2, "w");  // write header
     fprintf(fSamples, ".i %i\n", Aig_ManCiNum(pAig));
     fprintf(fSamples, ".o %i\n", Aig_ManCoNum(pAig));
-    fprintf(fSamples, ".type fr\n");
+    fprintf(fSamples, ".ilb");
+    Abc_NtkForEachCi(pNtk, pObj, i)
+        fprintf(fSamples, " %s", Abc_ObjName(pObj));
+    fprintf(fSamples, "\n.ob");
+    Abc_NtkForEachCo(pNtk, pObj, i)
+        fprintf(fSamples, " %s", Abc_ObjName(pObj));
+    fprintf(fSamples, "\n.type fr\n");
     fclose(fSamples);
 
     for (int n=0; n<=(nPatterns/nPatPerSim); n++)

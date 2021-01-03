@@ -19,6 +19,73 @@
 
 ABC_NAMESPACE_HEADER_START
 
+enum SolvingType {
+    HEURISTIC_SINGLE = 0,
+    HEURISTIC_8 = 1,
+    HEURISTIC_EACH = 6, // eachPo mode, while others are fullPo mode
+    LEXSAT_CLASSIC = 2,
+    LEXSAT_ENCODE_C = 3,
+    REENCODE = 4,
+    NONE = 5    
+};
+
+enum MinimizeType {
+    NOMIN = 0,
+    BASIC = 1,
+    STRONG = 2
+};
+
+class IcompactMgr
+{
+public:
+    IcompactMgr() {}
+    ~IcompactMgr() {}
+    int icompact_cube(SolvingType fSolving, double fRatio, int fNewVar);
+
+private:
+    int _oriPi, _oriPo;
+    int _nPi, _nPo; // compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
+    bool *_litPi, *_litPo;
+    abctime _step_time, _end_time;
+
+    char *_funcFileName;
+    char *_caresetFileName;
+    char *_baseFileName; // base file name for multiple intermediate files
+    char *_resultlogFileName;
+    char *_workingFileName;
+    char *_tmpFileName;
+
+    // intermediate files
+    char _samplesplaFileName[500]; // samples of simulation
+    char _reducedplaFileName[500]; // redundent inputs removed
+    char _outputreencodedFileName[500];
+    char _outputmappingFileName[500]; // omap
+    char _inputreencodedFileName[500];
+    char _inputmappingFileName[500]; // imap
+
+    // external tool use
+    char _forqesFileName[500];
+    char _forqesCareFileName[500];
+    char _MUSFileName[500];
+    
+    // sizing & timing  
+    double _time_icompact, _time_ireencode, _time_oreencode; // runtime for each operation 
+    int _gate_imap, _gate_core, _gate_omap, _gate_batch_func; // aig node count for each sub-circuit
+    double _time_imap, _time_core, _time_omap, _time_batch_func; // minimization time for each sub-circuit
+
+    // aux functions
+    void setFilenames(char *baseFileName);
+
+    // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
+    int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio);
+    int icompact_cube_main(Abc_Ntk_t * pNtk_func, Abc_Ntk_t* pNtk_careset);
+    int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, char* forqesFileName, char* forqesCareFileName, char* MUSFileName);
+    int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset);
+    int output_compaction_naive(char* plaFile, char* reencodeplaFile, char* outputmapping);
+    int icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record);
+
+};
+
 extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
 
 extern int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
@@ -27,13 +94,6 @@ extern void writeCompactpla(char* outputplaFileName, char* patternFileName, int 
 extern int espresso_input_count(char* filename);
 extern Abc_Ntk_t* get_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time);
 extern Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time, int nPi, int nPo, int *litPo);
-
-extern int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio, int nPi, int nPo, bool *litPi, bool *litPo);
-extern int icompact_cube_main(Abc_Ntk_t * pNtk_func, Abc_Ntk_t* pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo);
-extern int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo, char* forqesFileName, char* forqesCareFileName, char* MUSFileName);
-extern int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo);
-extern int output_compaction_naive(char* plaFile, char* reencodeplaFile, char* outputmapping);
-extern int icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record);
 
 // two get_support functions has different po order, sort ori to match pla order.
 // check get_support_pat, support sizes are greater than expexted 

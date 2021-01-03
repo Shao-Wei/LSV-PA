@@ -420,147 +420,18 @@ Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate
 
 /////////////////////////////////////////////////////////
 // Aux functions
-void write_clause_to_file(FILE* ff, int& nClause, lit* begin, lit* end)
+/////////////////////////////////////////////////////////
+void IcompactMgr::setFilenames(char *baseFileName)
 {
-    lit* i;
-    nClause++;
-    for(i=begin; i<end; i++)
-        fprintf(ff, "%s%d ", (*i)&1 ? "-":"", (*i)>>1 );
-    fprintf(ff, "0\n");
-}
-
-/*== base/abci/abcDar.c ==*/
-extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
-
-int sat_solver_conditional_unequal(FILE* ff, int& nClause,  sat_solver * pSat, int iVar, int iVar2, int iVarCond )
-{
-    lit Lits[3];
-    int Cid;
-    assert( iVar >= 0 );
-    assert( iVar2 >= 0 );
-    assert( iVarCond >= 0 );
-
-    Lits[0] = toLitCond( iVarCond, 0 );
-    Lits[1] = toLitCond( iVar, 1 );
-    Lits[2] = toLitCond( iVar2, 0 );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 3 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert( Cid );
-    
-    Lits[0] = toLitCond( iVarCond, 0 );
-    Lits[1] = toLitCond( iVar, 0 );
-    Lits[2] = toLitCond( iVar2, 1 );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 3 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert( Cid );
-    
-    return 2;
-}
-
-int sat_solver_iff_unequal(FILE* ff, int& nClause, sat_solver *pSat, int iVar, int iVar2, int iVarCond)
-{
-    // (x!=x' <> cond)
-    // (x=x' + cond)^(x!=x + ~cond)
-    lit Lits[3];
-    int Cid;
-    assert(iVar >= 0);
-    assert(iVar2 >= 0);
-    assert(iVarCond >= 0);
-
-    // (x=x' + cond)
-    Lits[0] = toLitCond(iVarCond, 0);
-    Lits[1] = toLitCond(iVar, 1);
-    Lits[2] = toLitCond(iVar2, 0);
-    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert(Cid);
-
-    Lits[0] = toLitCond(iVarCond, 0);
-    Lits[1] = toLitCond(iVar, 0);
-    Lits[2] = toLitCond(iVar2, 1);
-    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert(Cid);
-
-    // (x!=x + ~cond)
-    Lits[0] = toLitCond(iVarCond, 1);
-    Lits[1] = toLitCond(iVar, 0);
-    Lits[2] = toLitCond(iVar2, 0);
-    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert(Cid);
-
-    Lits[0] = toLitCond(iVarCond, 1);
-    Lits[1] = toLitCond(iVar, 1);
-    Lits[2] = toLitCond(iVar2, 1);
-    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert(Cid);
-
-    return 4;
-}
-
-int sat_solver_and(FILE* ff, int& nClause, sat_solver * pSat, int iVar, int iVar0, int iVar1, int fCompl0, int fCompl1, int fCompl )
-{
-    lit Lits[3];
-    int Cid;
-
-    Lits[0] = toLitCond( iVar, !fCompl );
-    Lits[1] = toLitCond( iVar0, fCompl0 );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 2 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 2);
-    assert( Cid );
-
-    Lits[0] = toLitCond( iVar, !fCompl );
-    Lits[1] = toLitCond( iVar1, fCompl1 );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 2 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 2);
-    assert( Cid );
-
-    Lits[0] = toLitCond( iVar, fCompl );
-    Lits[1] = toLitCond( iVar0, !fCompl0 );
-    Lits[2] = toLitCond( iVar1, !fCompl1 );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 3 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 3);
-    assert( Cid );
-    return 3;
-}
-
-int sat_solver_buffer(FILE* ff, int& nClause, sat_solver * pSat, int iVarA, int iVarB, int fCompl )
-{
-    lit Lits[2];
-    int Cid;
-    assert( iVarA >= 0 && iVarB >= 0 );
-
-    Lits[0] = toLitCond( iVarA, 0 );
-    Lits[1] = toLitCond( iVarB, !fCompl );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 2 );
-    if ( Cid == 0 )
-        return 0;
-    write_clause_to_file(ff, nClause, Lits, Lits + 2);
-    assert( Cid );
-
-    Lits[0] = toLitCond( iVarA, 1 );
-    Lits[1] = toLitCond( iVarB, fCompl );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 2 );
-    if ( Cid == 0 )
-        return 0;
-    write_clause_to_file(ff, nClause, Lits, Lits + 2);
-    assert( Cid );
-    return 2;
-}
-
-int sat_solver_const(FILE* ff, int& nClause, sat_solver * pSat, int iVar, int fCompl )
-{
-    lit Lits[1];
-    int Cid;
-    assert( iVar >= 0 );
-
-    Lits[0] = toLitCond( iVar, fCompl );
-    Cid = sat_solver_addclause( pSat, Lits, Lits + 1 );
-    write_clause_to_file(ff, nClause, Lits, Lits + 1);
-    assert( Cid );
-    return 1;
+    sprintf(_samplesplaFileName,      "%s.samples.pla",   baseFileName);
+    sprintf(_reducedplaFileName,      "%s.reduced.pla",   baseFileName);
+    sprintf(_outputreencodedFileName, "%s.oreencode.pla", baseFileName);
+    sprintf(_outputmappingFileName,   "%s.omap.pla",      baseFileName);
+    sprintf(_inputreencodedFileName,  "%s.ireencode.pla", baseFileName);
+    sprintf(_inputmappingFileName,    "%s.imap.pla",      baseFileName);
+    sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
+    sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
+    sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
 }
 
 void get_support_ori(Abc_Ntk_t* pNtk, int nPi, int nPo, int** supportInfo)
@@ -595,7 +466,193 @@ void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo)
     }
 }
 
-////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////
+// Input compact methods
+/////////////////////////////////////////////////////////
+int IcompactMgr::icompact_cube(SolvingType fSolving, double fRatio, int fNewVar)
+{
+    int result;
+    char buff[102400];
+    char* t;
+
+    // initial checkings
+    int nLitPo = 0;
+    for(int i=0; i<_nPo; i++)
+        if(_litPo[i]) { nLitPo++; }
+    if(nLitPo == 0) { printf("icompact_cube: Cared output size zero: *litPo must be specified\n"); return -1; }
+
+    FILE* fPla = fopen(_workingFileName, "r");
+    fgets(buff, 102400, fPla);
+    t = strtok(buff, " \n");
+    t = strtok(NULL, " \n");
+    assert(atoi(t) == _nPi);
+    fgets(buff, 102400, fPla);
+    t = strtok(buff, " \n");
+    t = strtok(NULL, " \n");
+    assert(atoi(t) == _nPo);
+    fclose(fPla);
+
+    if(fSolving == HEURISTIC_SINGLE)
+    {
+        _step_time = Abc_Clock();
+        result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
+    }
+    else if(fSolving == HEURISTIC_8)
+    {
+        _step_time = Abc_Clock();
+        result = icompact_cube_heuristic(_workingFileName, 8, fRatio);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
+    }
+    else if(fSolving == LEXSAT_CLASSIC)
+    {
+        _step_time = Abc_Clock();
+        result = icompact_cube_main(pNtk_sample, pNtk_careset);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);     
+    }
+    else if(fSolving == LEXSAT_ENCODE_C)
+    {        
+        _step_time = Abc_Clock();
+        result = icompact_cube_direct_encode_with_c(_workingFileName, pNtk_careset, _forqesFileName, _forqesCareFileName, _MUSFileName);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
+    }
+    else if(fSolving == REENCODE)
+    {
+        _step_time = Abc_Clock();
+        recordPi = new int[_nPi];
+        result = icompact_cube_reencode(_workingFileName, inputmappingFileName, inputreencodedFileName, 1, fNewVar, recordPi);
+        _end_time = Abc_Clock();
+        _time_ireencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        printf("reencode computation time: %9.2f\n", _time_ireencode);
+        printf("Input compacted to %i / %i\n", result, _nPi);
+    }
+    else if(fSolving == HEURISTIC_EACH)
+    {
+        _step_time = Abc_Clock();
+        for(int i=0; i<workingPo; i++)
+        {
+            for(int k=0; k<workingPo; k++)
+                _litPo[k] = 0;
+            _litPo[i] = 1;
+
+            result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+            assert(result > 0);
+            writeCompactpla(tmpFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, i);
+            sprintf( Command, "read %s; strash", tmpFileName);
+            if(Cmd_CommandExecute(pAbc,Command))
+            {
+                printf("Cannot read %s\n", tmpFileName);
+                return NULL;
+            }
+            if(Cmd_CommandExecute(pAbc,minimizeCommand))
+            {
+                printf("Minimize %s. Failed.\n", tmpFileName);
+                return NULL;
+            }
+            pNtk_tmp = Abc_FrameReadNtk(pAbc);
+            if(pNtk_core == NULL)
+                pNtk_core = Abc_NtkDup(pNtk_tmp);
+            else
+                Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
+        }
+        _end_time = Abc_Clock();
+        Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
+        if(Cmd_CommandExecute(pAbc,minimizeCommand))
+        {
+            printf("Minimize %s. Failed.\n", tmpFileName);
+            return NULL;
+        }
+        pNtk_core = Abc_FrameReadNtk(pAbc);
+        _time_core = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        _gate_core = Abc_NtkNodeNum(pNtk_core);
+        printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
+    }
+    
+    if(fSolving != (REENCODE || HEURISTIC_EACH))
+    {
+        _time_icompact = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        printf("==========================\n");
+        printf("icompact computation time: %9.2f\n", _time_icompact);
+        printf("icompact result: %i / %i\n", result, _nPi);
+        for(int i=0; i<_nPi; i++)
+            if(_litPi[i])
+                printf("%i ", i);
+        printf("\n");
+    }
+
+    return 0;
+}
+
+/*== base/abci/abcDar.c ==*/
+extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
+
+/*== Slightly modified. sat/bsat/satSolver.h ==*/
+int sat_solver_conditional_unequal(sat_solver * pSat, int iVar, int iVar2, int iVarCond )
+{
+    lit Lits[3];
+    int Cid;
+    assert( iVar >= 0 );
+    assert( iVar2 >= 0 );
+    assert( iVarCond >= 0 );
+
+    Lits[0] = toLitCond( iVarCond, 0 );
+    Lits[1] = toLitCond( iVar, 1 );
+    Lits[2] = toLitCond( iVar2, 0 );
+    Cid = sat_solver_addclause( pSat, Lits, Lits + 3 );
+    assert( Cid );
+    
+    Lits[0] = toLitCond( iVarCond, 0 );
+    Lits[1] = toLitCond( iVar, 0 );
+    Lits[2] = toLitCond( iVar2, 1 );
+    Cid = sat_solver_addclause( pSat, Lits, Lits + 3 );
+    assert( Cid );
+    
+    return 2;
+}
+
+int sat_solver_iff_unequal(sat_solver *pSat, int iVar, int iVar2, int iVarCond)
+{
+    // (x!=x' <> cond)
+    // (x=x' + cond)^(x!=x + ~cond)
+    lit Lits[3];
+    int Cid;
+    assert(iVar >= 0);
+    assert(iVar2 >= 0);
+    assert(iVarCond >= 0);
+
+    // (x=x' + cond)
+    Lits[0] = toLitCond(iVarCond, 0);
+    Lits[1] = toLitCond(iVar, 1);
+    Lits[2] = toLitCond(iVar2, 0);
+    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
+    assert(Cid);
+
+    Lits[0] = toLitCond(iVarCond, 0);
+    Lits[1] = toLitCond(iVar, 0);
+    Lits[2] = toLitCond(iVar2, 1);
+    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
+    assert(Cid);
+
+    // (x!=x + ~cond)
+    Lits[0] = toLitCond(iVarCond, 1);
+    Lits[1] = toLitCond(iVar, 0);
+    Lits[2] = toLitCond(iVar2, 0);
+    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
+    assert(Cid);
+
+    Lits[0] = toLitCond(iVarCond, 1);
+    Lits[1] = toLitCond(iVar, 1);
+    Lits[2] = toLitCond(iVar2, 1);
+    Cid = sat_solver_addclause(pSat, Lits, Lits + 3);
+    assert(Cid);
+
+    return 4;
+}
+
 int sat_solver_addclause_from( sat_solver* pSat, Cnf_Dat_t * pCnf )
 {
 	for (int i = 0; i < pCnf->nClauses; i++ )
@@ -643,31 +700,17 @@ void sat_solver_print( sat_solver* pSat, int fDimacs )
                      (pSat->assigns[i] == 1)? "-": "",    // var0
                      i + (int)(fDimacs>0),
                      (fDimacs) ? " 0" : "");
-
     printf( "\n" );
-
 }
 
-int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo)
+int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset)
 {
-    FILE* ff;
-    ff = fopen("full.dimacs", "w");
-    int nClause = 0;
-
+    int result = _nPi;
+    int pLits[_nPi]; // satSolver assumption
     int nLitPo = 0;
-    for(int i=0; i<nPo; i++)
-    {
-        if(litPo[i])
-            nLitPo++;
-    } 
+    for(int i=0; i<_nPo; i++)
+        if(_litPo[i]) { nLitPo++; }    
 
-    // input check
-    if(Abc_NtkPiNum(pNtk_func) != nPi) { printf("icompact_main: Input number mismatch: Function network: %i; User specified: %i\n", Abc_NtkPiNum(pNtk_func), nPi); return -1; }
-    if(Abc_NtkPoNum(pNtk_func) != nPo) { printf("icompact_main: Output number mismatch: Function network: %i; User specified: %i\n", Abc_NtkPoNum(pNtk_func), nPo); return -1; }
-    if(Abc_NtkPiNum(pNtk_careset) != nPi) { printf("icompact_main: Input number mismatch: Careset network: %i; User specified: %i\n", Abc_NtkPiNum(pNtk_careset), nPi); return -1; }
-    if(Abc_NtkPoNum(pNtk_careset) != 1) { printf("icompact_main: Wrong careset format\n"); return -1; }
-    if(nLitPo == 0) { printf("icompact_main: Cared output size zero: *litPo must be specified\n"); return -1; }
-    
     ///////////////////////////////////////////////////////////////////////
     // start solver
     sat_solver *pSolver = sat_solver_new();
@@ -676,7 +719,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
     Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
     Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
 
-    Vec_Int_t *pOriPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
         Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
@@ -688,7 +731,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         cid = sat_solver_add_const(pSolver, var, 0);
         sat_solver_print(pSolver, 1);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
             int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
@@ -700,7 +743,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         Aig_ManStop(pAigOri);
     }
 
-    Vec_Int_t *pDupPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
         Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
@@ -712,7 +755,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         cid = sat_solver_add_const(pSolver, var, 0);
         sat_solver_print(pSolver, 1);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
             int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
@@ -727,15 +770,15 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
     Abc_Ntk_t *pNtkOut1 = Abc_NtkDup(pNtk_func);
     Abc_Ntk_t *pNtkOut2 = Abc_NtkDup(pNtkOut1);
 
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(nPi);
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(nPo);
+    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
     {
         Aig_Man_t *pAigOut1 = Abc_NtkToDar(pNtkOut1, 0, 0);
         Cnf_Dat_t *pCnfOut1 = Cnf_Derive(pAigOut1, Abc_NtkCoNum(pNtkOut1));
         Cnf_DataLift(pCnfOut1, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfOut1);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjOut1 = Aig_ManCi(pCnfOut1->pMan, i);
             int var = pCnfOut1->pVarNums[Aig_ObjId(pAigObjOut1)];
@@ -743,7 +786,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
             Vec_IntPush(pOut1Pi, var);
         }
         // store var of po
-        for (int i = 0; i < nPo; i++)
+        for (int i=0; i<_nPo; i++)
         {
             Aig_Obj_t *pAigObjOut1 = Aig_ManCo(pCnfOut1->pMan, i);
             int var = pCnfOut1->pVarNums[Aig_ObjId(pAigObjOut1)];
@@ -755,24 +798,23 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         Aig_ManStop(pAigOut1);
     }
 
-    for (int i = 0; i < nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Pi, i);
         int varOri = Vec_IntEntry(pOriPi, i);
         cid = sat_solver_add_buffer(pSolver, varOut1, varOri, 0);
         assert(cid);
     }
-    sat_solver_print(pSolver, 1);
 
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(nPi);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(nPo);
+    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
     {
         Aig_Man_t *pAigOut2 = Abc_NtkToDar(pNtkOut2, 0, 0);
         Cnf_Dat_t *pCnfOut2 = Cnf_Derive(pAigOut2, Abc_NtkCoNum(pNtkOut2));
         Cnf_DataLift(pCnfOut2, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfOut2);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjOut2 = Aig_ManCi(pCnfOut2->pMan, i);
             int var = pCnfOut2->pVarNums[Aig_ObjId(pAigObjOut2)];
@@ -780,7 +822,7 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
             Vec_IntPush(pOut2Pi, var);
         }
         // store var of po
-        for (int i = 0; i < nPo; i++)
+        for (int i=0; i<_nPo; i++)
         {
             Aig_Obj_t *pAigObjOut2 = Aig_ManCo(pCnfOut2->pMan, i);
             int var = pCnfOut2->pVarNums[Aig_ObjId(pAigObjOut2)];
@@ -792,42 +834,41 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         Aig_ManStop(pAigOut2);
     }
 
-    for (int i = 0; i < nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut2 = Vec_IntEntry(pOut2Pi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         cid = sat_solver_add_buffer(pSolver, varOut2, varDup, 0);
         assert(cid);
     }
-    sat_solver_print(pSolver, 1);
     // printf("function clauses / variables: %i / %i\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver));
     // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varAlphaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pAlphaControls, varAlphaControl);
-        cid = sat_solver_conditional_unequal(ff, nClause, pSolver, varOri, varDup, varAlphaControl); // self defined
+        cid = sat_solver_conditional_unequal(pSolver, varOri, varDup, varAlphaControl);
         assert(cid);
     }
 
     // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varBetaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pBetaControls, varBetaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOri, varDup, varBetaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOri, varDup, varBetaControl);
         assert(cid);
     }
 
     // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
+    for (int i = 0; i < _nPi; i++)
     {
         int varAlpha = Vec_IntEntry(pAlphaControls, i);
         int varBeta = Vec_IntEntry(pBetaControls, i);
@@ -837,33 +878,33 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
         assert(cid);
     }
 
-    lit Lits_AlphaBeta[nPi];
-    for (int i = 0; i < nPi; i++)
+    lit Lits_AlphaBeta[_nPi];
+    for (int i=0; i<_nPi; i++)
     {
         int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
         Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
     }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
+    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
     assert(cid);
 
     // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(nPo);
-    for(int i=0; i<nPo; i++)
+    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
+    for(int i=0; i<_nPo; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Po, i);
         int varOut2 = Vec_IntEntry(pOut2Po, i);
         int varGammaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pGammaControls, varGammaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOut1, varOut2, varGammaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOut1, varOut2, varGammaControl);
         assert(cid);
     }
 
     // V(Gamma)
     lit Lits_Gamma[nLitPo];
     int count = 0;
-    for(int i=0; i<nPo; i++)
+    for(int i=0; i<_nPo; i++)
     {
-        if(litPo[i])
+        if(_litPo[i])
         {
             int var = Vec_IntEntry(pGammaControls, i);
             Lits_Gamma[count] = toLitCond(var, 0);
@@ -873,75 +914,23 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
     cid = sat_solver_addclause(pSolver, Lits_Gamma, Lits_Gamma + nLitPo);
     assert(cid);
 
-    printf("\npOriPi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOriPi, i));
-    printf("\npDupPi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pDupPi, i));
-    printf("\npOut1Pi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOut1Pi, i));
-    printf("\npOut1Po\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pOut1Po, i));
-    printf("\npOut2Pi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOut2Pi, i));
-    printf("\npOut2Po\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pOut2Po, i));
-    printf("\npAlphaControls\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pAlphaControls, i));
-    printf("\npBetaControls\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pBetaControls, i));
-    printf("\npAndAlphaBeta\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pAndAlphaBeta, i));
-    printf("\npGammaControls\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pGammaControls, i));
-
-    // sat_solver_print(pSolver, 1);
-    // Sat_SolverWriteDimacs(pSolver, "tmp.dimacs", NULL, NULL, 1);
-
-    // ff = fopen("care.dimacs", "w"); 
-    // fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), nPi);   
-    // for (int i = 0; i < nPi; i++)
-    // {
-    //     int varAlphaControl = Vec_IntEntry(pAlphaControls, i);
-    //     fprintf(ff, "-%i 0\n", varAlphaControl+1);
-    // }
-    // fclose(ff);
-    
-    
-
     ///////////////////////////////////////////////////////////////////////
     // printf("Total clauses / variables: %i / %i\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver));
-    
     // set assumption order
-    int result = nPi;
-    int pLits[nPi];
-    for (int i = 0; i < nPi; i++)
-    {
+    for (int i=0; i<_nPi; i++)
         pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);
-    }
-    Sat_SolverWriteDimacs(pSolver, "write.dimacs", pLits, pLits+nPi, 1);
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, nPi, 0);
+    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
 
     // update litPi
-    for(int i=0; i<nPi; i++)
-    {
-        litPi[i] = 0;
-    }
+    for(int i=0; i<_nPi; i++)
+        _litPi[i] = 0;
     for(int i=0; i<result; i++)
     {
         int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var <nPi);
-        litPi[var] = 1;
+        assert(var >= 0 && var < _nPi);
+        _litPi[var] = 1;
     }
+
     // clean up
     sat_solver_delete(pSolver);
     Abc_NtkDelete(pNtkOri);
@@ -956,37 +945,20 @@ int icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset, int nPi
     return result;
 }
 
-int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo, char* forqesFileName, char* forqesCareFileName, char* MUSFileName)
+int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, char* forqesFileName, char* forqesCareFileName, char* MUSFileName)
 {
-    FILE *ff, *fm;
-    ff = fopen(forqesFileName, "w");
-    fprintf(ff, "p cnf                         ");
-    int nClause = 0;
-
+    int result = _nPi;
+    int pLits[_nPi];
     char buff[102400];
     char* t;
-    FILE* fPla = fopen(plaFile, "r");
-
+    FILE *ff, *fm, *fPla; // file Forqes, file Muser2, file working pla  
     int nLitPo = 0;
-    for(int i=0; i<nPo; i++)
-    {
-        if(litPo[i])
-            nLitPo++;
-    } 
+    for(int i=0; i<_nPo; i++)
+        if(_litPo[i]) { nLitPo++; }
     
-    // input check
-    if(Abc_NtkPiNum(pNtk_careset) != nPi) { printf("icompact_main: Input number mismatch: Careset network: %i; User specified: %i\n", Abc_NtkPiNum(pNtk_careset), nPi); return -1; }
-    if(Abc_NtkPoNum(pNtk_careset) != 1) { printf("icompact_main: Wrong careset format\n"); return -1; }
-    if(nLitPo == 0) { printf("icompact_main: Cared output size zero: *litPo must be specified\n"); return -1; }
-
+    fPla = fopen(plaFile, "r");
     fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    assert(atoi(t) == nPi);
     fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    assert(atoi(t) == nPo);
     fgets(buff, 102400, fPla);
     ///////////////////////////////////////////////////////////////////////
     // start solver
@@ -996,20 +968,18 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
     Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
     Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
 
-    Vec_Int_t *pOriPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
         Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
         Cnf_DataLift(pCnfOri, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfOri);
-        for(int i=0; i<pCnfOri->nClauses; i++)
-            write_clause_to_file(ff, nClause, pCnfOri->pClauses[i], pCnfOri->pClauses[i+1]);
         Aig_Obj_t * pAigObj = Aig_ManCo(pCnfOri->pMan, 0);
         int var = pCnfOri->pVarNums[Aig_ObjId(pAigObj)];
         assert(var > 0);
-        cid = sat_solver_const(ff, nClause, pSolver, var, 0);
+        cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
             int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
@@ -1021,20 +991,18 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
         Aig_ManStop(pAigOri);
     }
 
-    Vec_Int_t *pDupPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
         Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
         Cnf_DataLift(pCnfDup, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfDup);
-        for(int i=0; i<pCnfDup->nClauses; i++)
-            write_clause_to_file(ff, nClause, pCnfDup->pClauses[i], pCnfDup->pClauses[i+1]);
         Aig_Obj_t * pAigObj = Aig_ManCo(pCnfDup->pMan, 0);
         int var = pCnfDup->pVarNums[Aig_ObjId(pAigObj)];
         assert(var > 0);
-        cid = sat_solver_const(ff, nClause, pSolver, var, 0);
+        cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
             int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
@@ -1045,10 +1013,10 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
         Cnf_DataFree(pCnfDup);
         Aig_ManStop(pAigDup);
     }
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(nPi);
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
     {
-        for(int i=0; i<nPi; i++)
+        for(int i=0; i<_nPi; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Pi, newVar1);
@@ -1056,10 +1024,10 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
             Vec_IntPush(pOut2Pi, newVar2);
         }
     }
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(nPo);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(nPo);
+    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
+    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
     {
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Po, newVar1);
@@ -1075,136 +1043,131 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
     // -c o2
     while(fgets(buff, 102400, fPla))
     {
-        lit Lits_Pattern1[nPi+1];
+        lit Lits_Pattern1[_nPi+1];
         int c1 = sat_solver_addvar(pSolver);
-        for(int i=0; i<nPi; i++)
+        for(int i=0; i<_nPi; i++)
         {
             int phase = (buff[i] == '1')? 1: 0;
             int varIn = Vec_IntGetEntry(pOut1Pi, i);
             Lits_Pattern1[i] = toLitCond(varIn, phase);
         }
-        Lits_Pattern1[nPi] = toLitCond(c1, 0);
-        cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + nPi + 1);
-        write_clause_to_file(ff, nClause, Lits_Pattern1, Lits_Pattern1 + nPi + 1);
+        Lits_Pattern1[_nPi] = toLitCond(c1, 0);
+        cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + _nPi + 1);
         assert(cid);
 
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
             lit Lits_Out1[2];
-            int phase = (buff[nPi + 1 + i] == '1')? 0: 1;
+            int phase = (buff[_nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut1Po, i);
             Lits_Out1[0] = toLitCond(c1, 1);
             Lits_Out1[1] = toLitCond(varOut, phase);
             cid = sat_solver_addclause(pSolver, Lits_Out1, Lits_Out1 + 2);
-            write_clause_to_file(ff, nClause, Lits_Out1, Lits_Out1 + 2);
             assert(cid);
         }
 
-        lit Lits_Pattern2[nPi+1];
+        lit Lits_Pattern2[_nPi+1];
         int c2 = sat_solver_addvar(pSolver);
-        for(int i=0; i<nPi; i++)
+        for(int i=0; i<_nPi; i++)
         {
             int phase = (buff[i] == '1')? 1: 0;
             int varIn = Vec_IntGetEntry(pOut2Pi, i);
             Lits_Pattern2[i] = toLitCond(varIn, phase);
         }
-        Lits_Pattern2[nPi] = toLitCond(c2, 0);
-        cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + nPi + 1);
-        write_clause_to_file(ff, nClause, Lits_Pattern2, Lits_Pattern2 + nPi + 1);
+        Lits_Pattern2[_nPi] = toLitCond(c2, 0);
+        cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + _nPi + 1);
         assert(cid);
 
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
             lit Lits_Out2[2];
-            int phase = (buff[nPi + 1 + i] == '1')? 0: 1;
+            int phase = (buff[_nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut2Po, i);
             Lits_Out2[0] = toLitCond(c2, 1);
             Lits_Out2[1] = toLitCond(varOut, phase);
             cid = sat_solver_addclause(pSolver, Lits_Out2, Lits_Out2 + 2);
-            write_clause_to_file(ff, nClause, Lits_Out2, Lits_Out2 + 2);
             assert(cid);
         }  
     }
     fclose(fPla);
 
-    for (int i = 0; i < nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Pi, i);
         int varOri = Vec_IntEntry(pOriPi, i);
-        cid = sat_solver_buffer(ff, nClause, pSolver, varOut1, varOri, 0);
+        cid = sat_solver_add_buffer(pSolver, varOut1, varOri, 0);
         assert(cid);
     }
-    for (int i=0; i<nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut2 = Vec_IntEntry(pOut2Pi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
-        cid = sat_solver_buffer(ff, nClause, pSolver, varOut2, varDup, 0);
+        cid = sat_solver_add_buffer(pSolver, varOut2, varDup, 0);
         assert(cid);
     }
     // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varAlphaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pAlphaControls, varAlphaControl);
-        cid = sat_solver_conditional_unequal(ff, nClause, pSolver, varOri, varDup, varAlphaControl); // self defined
+        cid = sat_solver_conditional_unequal(pSolver, varOri, varDup, varAlphaControl);
         assert(cid);
     }
 
     // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varBetaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pBetaControls, varBetaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOri, varDup, varBetaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOri, varDup, varBetaControl);
         assert(cid);
     }
 
     // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varAlpha = Vec_IntEntry(pAlphaControls, i);
         int varBeta = Vec_IntEntry(pBetaControls, i);
         int varAnd = sat_solver_addvar(pSolver);
         Vec_IntPush(pAndAlphaBeta, varAnd);
-        cid = sat_solver_and(ff, nClause, pSolver, varAnd, varAlpha, varBeta, 0, 0, 0);
+        cid = sat_solver_add_and(pSolver, varAnd, varAlpha, varBeta, 0, 0, 0);
         assert(cid);
     }
 
-    lit Lits_AlphaBeta[nPi];
-    for (int i = 0; i < nPi; i++)
+    lit Lits_AlphaBeta[_nPi];
+    for (int i=0; i<_nPi; i++)
     {
         int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
         Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
     }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
-    write_clause_to_file(ff, nClause, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
+    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
     assert(cid);
 
     // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(nPo);
-    for(int i=0; i<nPo; i++)
+    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
+    for(int i=0; i<_nPo; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Po, i);
         int varOut2 = Vec_IntEntry(pOut2Po, i);
         int varGammaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pGammaControls, varGammaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOut1, varOut2, varGammaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOut1, varOut2, varGammaControl);
         assert(cid);
     }
 
     // V(Gamma)
     lit Lits_Gamma[nLitPo];
     int count = 0;
-    for(int i=0; i<nPo; i++)
+    for(int i=0; i<_nPo; i++)
     {
-        if(litPo[i])
+        if(_litPo[i])
         {
             int var = Vec_IntEntry(pGammaControls, i);
             Lits_Gamma[count] = toLitCond(var, 0);
@@ -1212,83 +1175,50 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
         }
     }
     cid = sat_solver_addclause(pSolver, Lits_Gamma, Lits_Gamma + nLitPo);
-    write_clause_to_file(ff, nClause, Lits_Gamma, Lits_Gamma + nLitPo);
     assert(cid);
 
-    rewind(ff);
-    fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), nClause);
-    fclose(ff);
+    ///////////////////////////////////////////////////////////////////////
+    // write files for external use - need further check
+    if(forqesFileName != NULL && forqesCareFileName != NULL && MUSFileName != NULL)
+    {
+        Sat_SolverWriteDimacs(pSolver, forqesFileName, 0, 0, 1);
 
-    ff = fopen(forqesCareFileName, "w"); 
-    fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), nPi);   
-    for (int i = 0; i < nPi; i++)
-        fprintf(ff, "-%i 0\n", Vec_IntEntry(pAlphaControls, i));
-    fclose(ff);
+        ff = fopen(forqesCareFileName, "w"); 
+        fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), _nPi);   
+        for (int i = 0; i < _nPi; i++)
+            fprintf(ff, "-%i 0\n", Vec_IntEntry(pAlphaControls, i));
+        fclose(ff);
 
-    fm = fopen(MUSFileName, "w");
-    fprintf(fm, "p gcnf %i %i %i\n", sat_solver_nvars(pSolver), nClause+nPi, nPi);
-    ff = fopen(forqesFileName, "r");
-    fgets(buff, 102400, ff);
-    while(fgets(buff, 102400, ff))
-        fprintf(fm, "{0} %s", buff);
-    for (int i = 0; i < nPi; i++)
-        fprintf(fm, "{%i} -%i 0\n", i+1, Vec_IntEntry(pAlphaControls, i));
-    fclose(fm);  
+        fm = fopen(MUSFileName, "w");
+        fprintf(fm, "p gcnf %i %i %i\n", sat_solver_nvars(pSolver), sat_solver_nclauses(pSolver)+_nPi, _nPi);
+        ff = fopen(forqesFileName, "r");
+        fgets(buff, 102400, ff);
+        while(fgets(buff, 102400, ff))
+            fprintf(fm, "{0} %s", buff);
+        for (int i=0; i<_nPi; i++)
+            fprintf(fm, "{%i} -%i 0\n", i+1, Vec_IntEntry(pAlphaControls, i));
+        fclose(fm);  
+    }
     
-    /*
-    printf("\npOriPi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOriPi, i));
-    printf("\npDupPi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pDupPi, i));
-    printf("\npOut1Pi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOut1Pi, i));
-    printf("\npOut1Po\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pOut1Po, i));
-    printf("\npOut2Pi\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pOut2Pi, i));
-    printf("\npOut2Po\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pOut2Po, i));
-    printf("\npAlphaControls\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pAlphaControls, i));
-    printf("\npBetaControls\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pBetaControls, i));
-    printf("\npAndAlphaBeta\n");
-    for(int i=0; i<nPi; i++)
-        printf("%i ", Vec_IntEntry(pAndAlphaBeta, i));
-    printf("\npGammaControls\n");
-    for(int i=0; i<nPo; i++)
-        printf("%i ", Vec_IntEntry(pGammaControls, i));
-    */
     ///////////////////////////////////////////////////////////////////////
     // printf("Total clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
     
     // set assumption order
-    int result = nPi;
-
-    int pLits[nPi];
-    for (int i = 0; i < nPi; i++)
+    for (int i=0; i<_nPi; i++)
         pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);
     
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, nPi, 0);
+    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
     
     // update litPi
-    for(int i=0; i<nPi; i++)
+    for(int i=0; i<_nPi; i++)
     {
-        litPi[i] = 0;
+        _litPi[i] = 0;
     }
     for(int i=0; i<result; i++)
     {
         int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var <nPi);
-        litPi[var] = 1;
+        assert(var >= 0 && var < _nPi);
+        _litPi[var] = 1;
     }
     
     // clean up
@@ -1305,34 +1235,20 @@ int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, i
     return result;
 }
 
-int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset, int nPi, int nPo, bool *litPi, bool *litPo)
+int IcompactMgr::icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset)
 {
+    int result = _nPi;
+    int pLits[_nPi];
     char buff[102400];
     char* t;
-    FILE* fPla = fopen(plaFile, "r");
-    FILE* ff = fopen("full.dimacs", "w");
-    int nClause = 0;
-
+    FILE *fPla;  // file working pla  
     int nLitPo = 0;
-    for(int i=0; i<nPo; i++)
-    {
-        if(litPo[i])
-            nLitPo++;
-    } 
+    for(int i=0; i<_nPo; i++)
+        if(_litPo[i]) { nLitPo++; }
     
-    // input check
-    if(Abc_NtkPiNum(pNtk_careset) != nPi) { printf("icompact_main: Input number mismatch: Careset network: %i; User specified: %i\n", Abc_NtkPiNum(pNtk_careset), nPi); return -1; }
-    if(Abc_NtkPoNum(pNtk_careset) != 1) { printf("icompact_main: Wrong careset format\n"); return -1; }
-    if(nLitPo == 0) { printf("icompact_main: Cared output size zero: *litPo must be specified\n"); return -1; }
-
+    fPla = fopen(plaFile, "r");
     fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    assert(atoi(t) == nPi);
     fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    assert(atoi(t) == nPo);
     fgets(buff, 102400, fPla);
     ///////////////////////////////////////////////////////////////////////
     // start solver
@@ -1342,7 +1258,7 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
     Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
     Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
 
-    Vec_Int_t *pOriPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
         Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
@@ -1353,7 +1269,7 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
         assert(var > 0);
         cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
             int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
@@ -1365,7 +1281,7 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
         Aig_ManStop(pAigOri);
     }
 
-    Vec_Int_t *pDupPi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
     {
         Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
         Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
@@ -1376,7 +1292,7 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
         assert(var > 0);
         cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i = 0; i < nPi; i++)
+        for (int i=0; i<_nPi; i++)
         {
             Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
             int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
@@ -1388,10 +1304,10 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
         Aig_ManStop(pAigDup);
     }
     // printf("Careset clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(nPi);
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
     {
-        for(int i=0; i<nPi; i++)
+        for(int i=0; i<_nPi; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Pi, newVar1);
@@ -1399,10 +1315,10 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
             Vec_IntPush(pOut2Pi, newVar2);
         }
     }
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(nPo);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(nPo);
+    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
+    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
     {
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Po, newVar1);
@@ -1417,48 +1333,48 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
     // -i0 -i1 -i2 o2
     while(fgets(buff, 102400, fPla))
     {
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
-            lit Lits_Pattern1[nPi+1];
-            for(int j=0; j<nPi; j++)
+            lit Lits_Pattern1[_nPi+1];
+            for(int j=0; j<_nPi; j++)
             {
                 int phaseIn = (buff[j] == '1')? 1: 0;
                 int varIn = Vec_IntGetEntry(pOut1Pi, j);
                 Lits_Pattern1[j] = toLitCond(varIn, phaseIn);
             }
-            int phaseOut = (buff[nPi + 1 + i] == '1')? 0: 1;
+            int phaseOut = (buff[_nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut1Po, i);
-            Lits_Pattern1[nPi] = toLitCond(varOut, phaseOut);
-            cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + nPi + 1);
+            Lits_Pattern1[_nPi] = toLitCond(varOut, phaseOut);
+            cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + _nPi + 1);
             assert(cid);
         }
 
-        for(int i=0; i<nPo; i++)
+        for(int i=0; i<_nPo; i++)
         {
-            lit Lits_Pattern2[nPi+1];
-            for(int j=0; j<nPi; j++)
+            lit Lits_Pattern2[_nPi+1];
+            for(int j=0; j<_nPi; j++)
             {
                 int phaseIn = (buff[j] == '1')? 1: 0;
                 int varIn = Vec_IntGetEntry(pOut2Pi, j);
                 Lits_Pattern2[j] = toLitCond(varIn, phaseIn);
             }
-            int phaseOut = (buff[nPi + 1 + i] == '1')? 0: 1;
+            int phaseOut = (buff[_nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut2Po, i);
-            Lits_Pattern2[nPi] = toLitCond(varOut, phaseOut);
-            cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + nPi + 1);
+            Lits_Pattern2[_nPi] = toLitCond(varOut, phaseOut);
+            cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + _nPi + 1);
             assert(cid);
         }      
     }
     fclose(fPla);
 
-    for (int i = 0; i < nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Pi, i);
         int varOri = Vec_IntEntry(pOriPi, i);
         cid = sat_solver_add_buffer(pSolver, varOut1, varOri, 0);
         assert(cid);
     }
-    for (int i=0; i<nPi; i++)
+    for (int i=0; i<_nPi; i++)
     {
         int varOut2 = Vec_IntEntry(pOut2Pi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1467,32 +1383,32 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
     }
     // printf("Function clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
     // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varAlphaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pAlphaControls, varAlphaControl);
-        cid = sat_solver_conditional_unequal(ff, nClause, pSolver, varOri, varDup, varAlphaControl); // self defined
+        cid = sat_solver_conditional_unequal(pSolver, varOri, varDup, varAlphaControl);
         assert(cid);
     }
 
     // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
         int varBetaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pBetaControls, varBetaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOri, varDup, varBetaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOri, varDup, varBetaControl);
         assert(cid);
     }
 
     // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(nPi);
-    for (int i = 0; i < nPi; i++)
+    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
+    for (int i=0; i<_nPi; i++)
     {
         int varAlpha = Vec_IntEntry(pAlphaControls, i);
         int varBeta = Vec_IntEntry(pBetaControls, i);
@@ -1502,33 +1418,33 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
         assert(cid);
     }
 
-    lit Lits_AlphaBeta[nPi];
-    for (int i = 0; i < nPi; i++)
+    lit Lits_AlphaBeta[_nPi];
+    for (int i=0; i<_nPi; i++)
     {
         int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
         Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
     }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
+    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
     assert(cid);
 
     // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(nPo);
-    for(int i=0; i<nPo; i++)
+    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
+    for(int i=0; i<_nPo; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Po, i);
         int varOut2 = Vec_IntEntry(pOut2Po, i);
         int varGammaControl = sat_solver_addvar(pSolver);
         Vec_IntPush(pGammaControls, varGammaControl);
-        cid = sat_solver_iff_unequal(ff, nClause, pSolver, varOut1, varOut2, varGammaControl); // self defined
+        cid = sat_solver_iff_unequal(pSolver, varOut1, varOut2, varGammaControl);
         assert(cid);
     }
 
     // V(Gamma)
     lit Lits_Gamma[nLitPo];
     int count = 0;
-    for(int i=0; i<nPo; i++)
+    for(int i=0; i<_nPo; i++)
     {
-        if(litPo[i])
+        if(_litPo[i])
         {
             int var = Vec_IntEntry(pGammaControls, i);
             Lits_Gamma[count] = toLitCond(var, 0);
@@ -1537,30 +1453,22 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
     }
     cid = sat_solver_addclause(pSolver, Lits_Gamma, Lits_Gamma + nLitPo);
     assert(cid);
-    printf("Total clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
+
     ///////////////////////////////////////////////////////////////////////
-    
+    // printf("Total clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
     // set assumption order
-    int result = nPi;
-    
-    int pLits[nPi];
-    for (int i = 0; i < nPi; i++)
-    {
-        pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);
-    }
-    
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, nPi, 0);
+    for (int i=0; i<_nPi; i++)
+        pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);  
+    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
 
     // update litPi
-    for(int i=0; i<nPi; i++)
-    {
-        litPi[i] = 0;
-    }
+    for(int i=0; i<_nPi; i++)
+        _litPi[i] = 0;
     for(int i=0; i<result; i++)
     {
         int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var <nPi);
-        litPi[var] = 1;
+        assert(var >= 0 && var < _nPi);
+        _litPi[var] = 1;
     }
     
     // clean up
@@ -1577,7 +1485,7 @@ int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset
     return result;
 }
 
-int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio, int nPi, int nPo, bool *litPi, bool *litPo)
+int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double ratio)
 {
     int result;
     ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr();
@@ -1589,12 +1497,12 @@ int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio, int nPi, i
     vector<size_t> varOrder;
 
     // solve
-    mask = new char[nPi+1];
-    mask[nPi] = '\0';
-    minMaskCount = nPi;
-    minMask = new char[nPi+1];
-    minMask[nPi] = '\0';
-    for(size_t i=0; i<nPi; i++)
+    mask = new char[_nPi+1];
+    mask[_nPi] = '\0';
+    minMaskCount = _nPi;
+    minMask = new char[_nPi+1];
+    minMask[_nPi] = '\0';
+    for(size_t i=0; i<_nPi; i++)
         varOrder.push_back(i);
 
     for(int iter=0; iter<iterNum; iter++)
@@ -1607,42 +1515,42 @@ int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio, int nPi, i
             cout << varOrder[i] << " ";
         cout << endl;
 #endif
-        for(size_t i=0; i<nPi; i++)
+        for(size_t i=0; i<_nPi; i++)
             mask[i] = '1';
-        for(size_t i=0; i<nPi; i++)
+        for(size_t i=0; i<_nPi; i++)
         {
             size_t test = varOrder[i];
             if(mgr->getLocked(test))
                 continue;
             mask[test] = '0'; // drop var
             mgr->maskOne(test);
-            if(mgr->findConflict(litPo))
+            if(mgr->findConflict(_litPo))
             {
                 mask[test] = '1'; // preserve var
                 mgr->undoOne();
             }        
         }
-        maskCount = nPi;
-        for(size_t i=0; i<nPi; i++)
+        maskCount = _nPi;
+        for(size_t i=0; i<_nPi; i++)
             if(mask[i] == '0')
                 maskCount--; 
         if(maskCount <= minMaskCount)
         {
             minMaskCount = maskCount;
-            for(int i=0; i<nPi; i++)
+            for(int i=0; i<_nPi; i++)
                 minMask[i] = mask[i];
         }
     }
 
     // report
-    for(size_t i=0; i<nPi; i++)
-        litPi[i] = 0;
+    for(size_t i=0; i<_nPi; i++)
+        _litPi[i] = 0;
     result = 0;
-    for(size_t i=0; i<nPi; i++)
+    for(size_t i=0; i<_nPi; i++)
     {
         if(minMask[i] == '1')
         {
-            litPi[i] = 1;
+            _litPi[i] = 1;
             result++;
         }
     }
@@ -1653,7 +1561,7 @@ int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio, int nPi, i
     return result;
 }
 
-int icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record)
+int IcompactMgr::icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record)
 {
     int nRPo, lineNum;
     FILE* ff      = fopen(plaFile, "r");         // .i .o .type fr

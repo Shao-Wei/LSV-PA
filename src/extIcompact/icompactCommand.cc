@@ -10,22 +10,6 @@ ABC_NAMESPACE_IMPL_START
 // base/abci/abcStrash.c
 extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
 
-enum SolvingType {
-    HEURISTIC_SINGLE = 0,
-    HEURISTIC_8 = 1,
-    HEURISTIC_EACH = 6, // eachPo mode, while others are fullPo mode
-    LEXSAT_CLASSIC = 2,
-    LEXSAT_ENCODE_C = 3,
-    REENCODE = 4,
-    NONE = 5    
-};
-
-enum MinimizeType {
-    NOMIN = 0,
-    BASIC = 1,
-    STRONG = 2
-};
-
 static Abc_Ntk_t * DummyFunction( Abc_Ntk_t * pNtk )
 {
     Abc_Print( -1, "Please rewrite DummyFunction() in file \"icompactCommand.cc\".\n" );
@@ -104,9 +88,7 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
         fprintf( stdout, "Careset incorrect or too large for pattern simulation. Aborted\n");
         return 1;
     }
-
-    c = smlSimulateCombGiven( pNtk, samplesFileName);
-    if ( c )
+    if (smlSimulateCombGiven( pNtk, samplesFileName))
     {
         fprintf( stdout, "failed at simulation\n");
         return 1;
@@ -153,18 +135,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     char *outputFileName;
     char *resultlogFileName;
     
-    char samplesplaFileName[1000]; // samples of simulation
-    char reducedplaFileName[1000]; // redundent inputs removed
-    char outputreencodedFileName[1000];
-    char outputmappingFileName[1000];
-    char inputmappingFileName[1000];
-    char inputreencodedFileName[1000];
     char* tmpFileName = "tmp.pla";
-
-    // for external tool use
-    char forqesFileName[1000];
-    char forqesCareFileName[1000];
-    char MUSFileName[1000];
     
     Abc_Ntk_t* pNtk_func    = NULL;
     Abc_Ntk_t* pNtk_careset = NULL;
@@ -195,18 +166,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                                   refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
     
     abctime step_time, end_time;
-    double time_icompact   = 0;
-    double time_ireencode   = 0;
-    double time_oreencode   = 0;
     
-    int    gate_imap       = 0;
-    double time_imap       = 0;
-    int    gate_core       = 0;
-    double time_core       = 0;
-    int    gate_omap       = 0;
-    double time_omap       = 0;
-    int    gate_batch_func = 0;
-    double time_batch_func = 0;
     
     // == Parse command ======================
     Extra_UtilGetoptReset();
@@ -272,15 +232,6 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     globalUtilOptind++;
     outputFileName = argv[globalUtilOptind];
     globalUtilOptind++;
-    sprintf(samplesplaFileName,      "%s.samples.pla",   outputFileName);
-    sprintf(reducedplaFileName,      "%s.reduced.pla",   outputFileName);
-    sprintf(outputreencodedFileName, "%s.oreencode.pla", outputFileName);
-    sprintf(outputmappingFileName,   "%s.omap.pla",      outputFileName);
-    sprintf(inputreencodedFileName,  "%s.ireencode.pla", outputFileName);
-    sprintf(inputmappingFileName,    "%s.imap.pla",      outputFileName);
-    sprintf(forqesFileName,          "%s.full.dimacs",   outputFileName);
-    sprintf(forqesCareFileName,      "%s.care.dimacs",   outputFileName);
-    sprintf(MUSFileName,             "%s.gcnf",          outputFileName);
 
     // =======================================
     // Prepare Files
@@ -469,97 +420,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // =======================================
     // Solving
     // =======================================
-    if(fSolving == HEURISTIC_SINGLE)
-    {
-        step_time = Abc_Clock();
-        result = icompact_cube_heuristic(workingFileName, 1, fRatio, nPi, workingPo, litPi, litPo);
-        end_time = Abc_Clock();
-        writeCompactpla(reducedplaFileName, workingFileName, nPi, litPi, workingPo, litPo, 0);
-    }
-    else if(fSolving == HEURISTIC_8)
-    {
-        step_time = Abc_Clock();
-        result = icompact_cube_heuristic(workingFileName, 8, fRatio, nPi, workingPo, litPi, litPo);
-        end_time = Abc_Clock();
-        writeCompactpla(reducedplaFileName, workingFileName, nPi, litPi, workingPo, litPo, 0);
-    }
-    else if(fSolving == HEURISTIC_EACH)
-    {
-        step_time = Abc_Clock();
-        for(int i=0; i<workingPo; i++)
-        {
-            for(int k=0; k<workingPo; k++)
-                litPo[k] = 0;
-            litPo[i] = 1;
-
-            result = icompact_cube_heuristic(workingFileName, 1, fRatio, nPi, workingPo, litPi, litPo);
-            assert(result > 0);
-            writeCompactpla(tmpFileName, workingFileName, nPi, litPi, workingPo, litPo, i);
-            sprintf( Command, "read %s; strash", tmpFileName);
-            if(Cmd_CommandExecute(pAbc,Command))
-            {
-                printf("Cannot read %s\n", tmpFileName);
-                return NULL;
-            }
-            if(Cmd_CommandExecute(pAbc,minimizeCommand))
-            {
-                printf("Minimize %s. Failed.\n", tmpFileName);
-                return NULL;
-            }
-            pNtk_tmp = Abc_FrameReadNtk(pAbc);
-            if(pNtk_core == NULL)
-                pNtk_core = Abc_NtkDup(pNtk_tmp);
-            else
-                Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
-        }
-        end_time = Abc_Clock();
-        Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
-        if(Cmd_CommandExecute(pAbc,minimizeCommand))
-        {
-            printf("Minimize %s. Failed.\n", tmpFileName);
-            return NULL;
-        }
-        pNtk_core = Abc_FrameReadNtk(pAbc);
-        time_core = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-        gate_core = Abc_NtkNodeNum(pNtk_core);
-        printf("time: %9.2f; gate: %i\n", time_core, gate_core);
-    }
-    else if(fSolving == LEXSAT_CLASSIC)
-    {
-        step_time = Abc_Clock();
-        result = icompact_cube_main(pNtk_sample, pNtk_careset, nPi, workingPo, litPi, litPo);
-        end_time = Abc_Clock();
-        writeCompactpla(reducedplaFileName, workingFileName, nPi, litPi, workingPo, litPo, 0);     
-    }
-    else if(fSolving == LEXSAT_ENCODE_C)
-    {        
-        step_time = Abc_Clock();
-        result = icompact_cube_direct_encode_with_c(workingFileName, pNtk_careset, nPi, workingPo, litPi, litPo, forqesFileName, forqesCareFileName, MUSFileName);
-        end_time = Abc_Clock();
-        writeCompactpla(reducedplaFileName, workingFileName, nPi, litPi, workingPo, litPo, 0);
-    }
-    else if(fSolving == REENCODE)
-    {
-        step_time = Abc_Clock();
-        recordPi = new int[nPi];
-        result = icompact_cube_reencode(workingFileName, inputmappingFileName, inputreencodedFileName, 1, fNewVar, recordPi);
-        end_time = Abc_Clock();
-        time_ireencode = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-        printf("reencode computation time: %9.2f\n", time_ireencode);
-        printf("Input compacted to %i / %i\n", result, nPi);
-    }
-    
-    if(fSolving != (REENCODE || HEURISTIC_EACH))
-    {
-        time_icompact = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-        printf("==========================\n");
-        printf("icompact computation time: %9.2f\n", time_icompact);
-        printf("icompact result: %i / %i\n", result, nPi);
-        for(int i=0; i<nPi; i++)
-            if(litPi[i])
-                printf("%i ", i);
-        printf("\n");
-    }
+    result = icompact_cube(fSolving, workingFileName, caresetFileName, fRatio);
     /**
     printf("Start working on reduced pla.\n");
     for(int i=0; i<workingPo; i++)
