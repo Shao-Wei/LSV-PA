@@ -122,7 +122,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     double fRatio            = 0;
     int fNewVar              = 1;
     int fCollapse            = 0;
-    enum MinimizeType fMinimize   = BASIC;
+    enum MinimizeType fMinimize  = BASIC;
     int fOutput              = 0;
     int fLog                 = 0;
     int fBatch               = 1;
@@ -132,20 +132,9 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // == Overall declaration ================
     char *funcFileName;
     char *caresetFileName;
-    char *outputFileName;
+    char *baseFileName;
     char *resultlogFileName;
-    
-    char* tmpFileName = "tmp.pla";
-    
-    Abc_Ntk_t* pNtk_func    = NULL;
-    Abc_Ntk_t* pNtk_careset = NULL;
-    Abc_Ntk_t* pNtk_sample  = NULL;
-    Abc_Ntk_t* pNtk_tmp     = NULL;
-    Abc_Ntk_t* pNtk_imap    = NULL;
-    Abc_Ntk_t* pNtk_core    = NULL;
-    Abc_Ntk_t* pNtk_omap    = NULL;
-    int nPi, nPo;
-    bool *litPi, *litPo;
+
     int *recordPi, *recordPo;
     int nRPo;                   // compacted nPo
     char workingFileName[1000]; // switch between outputsamplesFileName / outputreplacedFileName (-o)
@@ -153,20 +142,6 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
     int** supportInfo_original; // support of original circuit (get input cone)
     int** supportInfo_pattern;  // support derived from input patterns
-    
-    FILE *fresultlog;
-    
-    char Command[2000];
-    char strongCommand[1000]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
-    char collapseCommand[1000] = "collapse";
-    char minimizeCommand[1000] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
-                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
-                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
-                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
-                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
-    
-    abctime step_time, end_time;
-    
     
     // == Parse command ======================
     Extra_UtilGetoptReset();
@@ -230,92 +205,14 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     globalUtilOptind++;
     caresetFileName = argv[globalUtilOptind];
     globalUtilOptind++;
-    outputFileName = argv[globalUtilOptind];
+    baseFileName = argv[globalUtilOptind];
     globalUtilOptind++;
 
-    // =======================================
-    // Prepare Files
-    // =======================================
-    printf("[Info] icompact start\n");
-    // get pNtk_careset, .type fd treat unseen patterns as offset
-    if(fSolving == LEXSAT_CLASSIC || fSolving == LEXSAT_ENCODE_C)
-    {
-        printf("Get pNtk_careset\n");
-        sprintf( Command, "read %s", caresetFileName);
-        if(Cmd_CommandExecute(pAbc,Command))
-        {
-            if(fLog)
-            {
-                fresultlog = fopen(resultlogFileName, "a");
-                fprintf( fresultlog, "%s,%s%s\n", funcFileName, "error when reading ", caresetFileName);
-                fclose(fresultlog);
-            }
-            printf("Cannot read %s\n", caresetFileName);
-            return 1;
-        }
-        if(fMinimize == STRONG)
-        {
-            if(Cmd_CommandExecute(pAbc,strongCommand))
-            {
-                if(fLog)
-                {
-                    fresultlog = fopen(resultlogFileName, "a");
-                    fprintf( fresultlog, "%s,%s\n", funcFileName, "error when strong minimizing");
-                    fclose(fresultlog);
-                }
-                printf("Error when strong minimize\n");
-                return 1;
-            }
-        }
-        if(fCollapse)
-        {
-            if(Cmd_CommandExecute(pAbc,collapseCommand))
-            {
-                if(fLog)
-                {
-                    fresultlog = fopen(resultlogFileName, "a");
-                    fprintf( fresultlog, "%s,%s\n", funcFileName, "error when collapse");
-                    fclose(fresultlog);
-                }
-                printf("Error when collapsing careset network\n");
-                return 1;
-            }
-        }
-        if(fMinimize != NOMIN)
-        {
-             if(Cmd_CommandExecute(pAbc,minimizeCommand))
-            {
-                if(fLog)
-                {
-                    fresultlog = fopen(resultlogFileName, "a");
-                    fprintf( fresultlog, "%s,%s\n", funcFileName, "error when minimizing");
-                    fclose(fresultlog);
-                }
-                printf("Error when minimizing careset network\n");
-                return 1;
-            }
-        }
-        pNtk_careset = Abc_NtkDup(Abc_FrameReadNtk(pAbc));    
-    }
+    printf("[Info] IcompactMgr start\n");
+    IcompactMgr *mgr = new IcompactMgr(pAbc, funcFileName, caresetFileName, baseFileName, resultlogFileName);
+    mgr->ocompact(fOutput, fNewVar);
+    mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch);
 
-    // get functional network, blif file format. Get nPi, nPo, used only for evaluation.
-    printf("Get pNtk_func\n");
-    sprintf( Command, "read %s; strash", funcFileName);
-    if(Cmd_CommandExecute(pAbc,Command))
-    {
-        if(fLog)
-        {
-            fresultlog = fopen(resultlogFileName, "a");
-            fprintf( fresultlog, "%s,%s%s\n", funcFileName, "error when reading ", funcFileName);
-            fclose(fresultlog);
-        }
-        printf("Cannot read %s\n", funcFileName);
-        return 1;
-    }
-    pNtk_func = Abc_NtkDup(Abc_FrameReadNtk(pAbc));
-    nPi = Abc_NtkPiNum(pNtk_func);
-    nPo = Abc_NtkPoNum(pNtk_func);
-    
     // get support info
     if(fSupport)
     {
@@ -356,57 +253,6 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
         return result;
     }
 
-    // get correct working pla, .type fr treat unseen patterns as don't care
-    printf("Get working pla\n");
-    strncpy(workingFileName, samplesplaFileName, 1000);
-    workingPo = nPo;
-
-    if(fOutput == 1)
-    {
-        step_time = Abc_Clock();
-        nRPo = output_compaction_naive(samplesplaFileName, outputreencodedFileName, outputmappingFileName);
-        strncpy(workingFileName, outputreencodedFileName, 1000);
-        workingPo = nRPo;
-        end_time = Abc_Clock();
-        time_oreencode = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-        printf("reencode computation time: %9.2f\n", time_oreencode);
-        printf("Output compacted to %i / %i\n", nRPo, nPo);
-    }
-    else if(fOutput == 2)
-    {
-        step_time = Abc_Clock();
-        recordPo = new int[nPo];
-        nRPo = icompact_cube_reencode(samplesplaFileName, outputreencodedFileName, outputmappingFileName, 0, fNewVar, recordPo);
-        strncpy(workingFileName, outputreencodedFileName, 1000);
-        workingPo = nRPo;
-        end_time = Abc_Clock();
-        time_oreencode = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-        printf("reencode computation time: %9.2f\n", time_oreencode);
-        printf("Output compacted to %i / %i\n", nRPo, nPo);
-    }
-
-    if(fBatch > 1)
-    {
-        printf("Get pNtk_batch\n");
-        step_time = Abc_Clock();
-        sprintf(Command, "readplabatch %i %s", fBatch, workingFileName);
-        if(Cmd_CommandExecute(pAbc,Command))
-        {
-            if(fLog)
-            {
-                fresultlog = fopen(resultlogFileName, "a");
-                fprintf( fresultlog, "%s,%s\n", funcFileName, "error when batching");
-                fclose(fresultlog);
-            }
-            printf("Fail at batching %s\n", workingFileName);
-            return 1;
-        }
-        pNtk_sample = Abc_NtkDup(Abc_FrameReadNtk(pAbc));
-        end_time = Abc_Clock();
-        gate_batch_func = Abc_NtkNodeNum(pNtk_func);
-        time_batch_func = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-    }
-    
     // init litPi
     litPi = new bool[nPi];
     for(int i=0; i<nPi; i++)
@@ -420,7 +266,6 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // =======================================
     // Solving
     // =======================================
-    result = icompact_cube(fSolving, workingFileName, caresetFileName, fRatio);
     /**
     printf("Start working on reduced pla.\n");
     for(int i=0; i<workingPo; i++)

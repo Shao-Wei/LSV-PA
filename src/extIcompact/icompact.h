@@ -38,30 +38,43 @@ enum MinimizeType {
 class IcompactMgr
 {
 public:
-    IcompactMgr() {}
+    IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFileName, char *baseFileName, char *resultlogFileName);
     ~IcompactMgr() {}
-    int icompact_cube(SolvingType fSolving, double fRatio, int fNewVar);
+    void ocompact(int fOutput, int fNewVar);
+    int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch);
 
 private:
+    bool _fIcompact, _fOcompact;
     int _oriPi, _oriPo;
-    int _nPi, _nPo; // compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
+    // TODO: Clarify usage of _nPi, _nPo;
+    int _nPi, _nPo; // No not touch _nPi. compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
     bool *_litPi, *_litPo;
     abctime _step_time, _end_time;
 
+    Abc_Frame_t * _pAbc;
     char *_funcFileName;
     char *_caresetFileName;
     char *_baseFileName; // base file name for multiple intermediate files
     char *_resultlogFileName;
-    char *_workingFileName;
-    char *_tmpFileName;
+    char* _tmpFileName = "tmp.pla";
 
     // intermediate files
+    char _workingFileName[500];
     char _samplesplaFileName[500]; // samples of simulation
     char _reducedplaFileName[500]; // redundent inputs removed
     char _outputreencodedFileName[500];
     char _outputmappingFileName[500]; // omap
     char _inputreencodedFileName[500];
     char _inputmappingFileName[500]; // imap
+
+    // intermediate pNtks
+    Abc_Ntk_t* _pNtk_func;
+    Abc_Ntk_t* _pNtk_careset;
+    Abc_Ntk_t* _pNtk_samples;
+    Abc_Ntk_t* _pNtk_tmp;
+    Abc_Ntk_t* _pNtk_imap;
+    Abc_Ntk_t* _pNtk_core;
+    Abc_Ntk_t* _pNtk_omap;
 
     // external tool use
     char _forqesFileName[500];
@@ -70,23 +83,29 @@ private:
     
     // sizing & timing  
     double _time_icompact, _time_ireencode, _time_oreencode; // runtime for each operation 
-    int _gate_imap, _gate_core, _gate_omap, _gate_batch_func; // aig node count for each sub-circuit
-    double _time_imap, _time_core, _time_omap, _time_batch_func; // minimization time for each sub-circuit
+    int _gate_imap, _gate_core, _gate_omap, _gate_batch; // aig node count for each sub-circuit
+    double _time_imap, _time_core, _time_omap, _time_batch; // minimization time for each sub-circuit
 
     // aux functions
-    void setFilenames(char *baseFileName);
+    int check_pla_pipo(char *pFileName);
+
+    // ntk functions
+    void getNtk_func(); // used in constructor
+    Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
+    Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
+    Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
+//    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio);
     int icompact_cube_main(Abc_Ntk_t * pNtk_func, Abc_Ntk_t* pNtk_careset);
     int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, char* forqesFileName, char* forqesCareFileName, char* MUSFileName);
     int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset);
-    int output_compaction_naive(char* plaFile, char* reencodeplaFile, char* outputmapping);
-    int icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record);
-
+    
+    // reencode methods
+    int reencode_naive(char* plaFile, char* reencodeplaFile, char* outputmapping);
+    int reencode_heuristic(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record);
 };
-
-extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
 
 extern int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
 extern int careset2patterns_r(char* patternsFileName, char* caresetFilename, int nPi);

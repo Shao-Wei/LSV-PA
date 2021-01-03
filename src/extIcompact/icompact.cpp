@@ -11,6 +11,178 @@
 #include "string.h"
 
 ABC_NAMESPACE_IMPL_START
+/////////////////////////////////////////////////////////
+// Public Functions
+/////////////////////////////////////////////////////////
+
+IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFileName, char *baseFileName, char *resultlogFileName)
+{
+    _pAbc = pAbc; // used for executing minimization commands.
+    _funcFileName = funcFileName;
+    _caresetFileName = caresetFileName;
+    _baseFileName = baseFileName;
+    _resultlogFileName = resultlogFileName;
+    sprintf(_samplesplaFileName,      "%s.samples.pla",   baseFileName);
+    sprintf(_reducedplaFileName,      "%s.reduced.pla",   baseFileName);
+    sprintf(_outputreencodedFileName, "%s.oreencode.pla", baseFileName);
+    sprintf(_outputmappingFileName,   "%s.omap.pla",      baseFileName);
+    sprintf(_inputreencodedFileName,  "%s.ireencode.pla", baseFileName);
+    sprintf(_inputmappingFileName,    "%s.imap.pla",      baseFileName);
+    sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
+    sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
+    sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
+
+    _pNtk_func    = NULL;
+    _pNtk_careset = NULL;
+    _pNtk_samples = NULL;
+    _pNtk_tmp     = NULL;
+    _pNtk_imap    = NULL;
+    _pNtk_core    = NULL;
+    _pNtk_omap    = NULL;
+
+    // set _workingFileName to default sample file
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+
+    // set _pNtk_func, _oriPi, _oriPo
+    getNtk_func();
+    _nPi = _oriPi;
+    _nPo = _oriPo;
+
+    // set flags
+    _fIcompact = 0;
+    _fOcompact = 0;
+}
+
+// fOutput = 1 naive, = 0 reencode
+void IcompactMgr::ocompact(int fOutput, int fNewVar)
+{
+    if(fOutput = 0) // do nothing
+        return;
+
+    int recordPo[_oriPo]; // used in reencode_heuristic
+    
+    _step_time = Abc_Clock();
+    if(fOutput == 1)
+        _nPo = reencode_naive(_samplesplaFileName, _outputreencodedFileName, _outputmappingFileName);
+    else
+        _nPo = reencode_heuristic(_samplesplaFileName, _outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
+    _end_time = Abc_Clock();
+
+    strncpy(_workingFileName, _outputreencodedFileName, 500);
+    _time_oreencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    printf("reencode computation time: %9.2f\n", _time_oreencode);
+    printf("Output compacted to %i / %i\n", _nPo, _oriPo);
+}
+
+int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch)
+{
+    int result;
+    assert(!check_pla_pipo(_workingFileName));
+
+    // preconditions: 
+    // _workingFileName well set
+    // _nPo well set, compacted if output compacted
+
+    if(fSolving == HEURISTIC_SINGLE)
+    {
+        _step_time = Abc_Clock();
+        result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, _nPo, _litPo, 0);
+    }
+    else if(fSolving == HEURISTIC_8)
+    {
+        _step_time = Abc_Clock();
+        result = icompact_cube_heuristic(_workingFileName, 8, fRatio);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, _nPo, _litPo, 0);
+    }
+    else if(fSolving == LEXSAT_CLASSIC)
+    {
+        getNtk_sample();
+        getNtk_careset();
+        _step_time = Abc_Clock();
+        result = icompact_cube_main(pNtk_sample, pNtk_careset);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);     
+    }
+    else if(fSolving == LEXSAT_ENCODE_C)
+    {        
+        _step_time = Abc_Clock();
+        result = icompact_cube_direct_encode_with_c(_workingFileName, pNtk_careset, _forqesFileName, _forqesCareFileName, _MUSFileName);
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
+    }
+    else if(fSolving == REENCODE)
+    {
+        _step_time = Abc_Clock();
+        recordPi = new int[_nPi];
+        result = icompact_cube_reencode(_workingFileName, inputmappingFileName, inputreencodedFileName, 1, fNewVar, recordPi);
+        _end_time = Abc_Clock();
+        _time_ireencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        printf("reencode computation time: %9.2f\n", _time_ireencode);
+        printf("Input compacted to %i / %i\n", result, _nPi);
+    }
+    else if(fSolving == HEURISTIC_EACH)
+    {
+        _step_time = Abc_Clock();
+        for(int i=0; i<workingPo; i++)
+        {
+            for(int k=0; k<workingPo; k++)
+                _litPo[k] = 0;
+            _litPo[i] = 1;
+
+            result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+            assert(result > 0);
+            writeCompactpla(tmpFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, i);
+            sprintf( Command, "read %s; strash", tmpFileName);
+            if(Cmd_CommandExecute(pAbc,Command))
+            {
+                printf("Cannot read %s\n", tmpFileName);
+                return NULL;
+            }
+            if(Cmd_CommandExecute(pAbc,minimizeCommand))
+            {
+                printf("Minimize %s. Failed.\n", tmpFileName);
+                return NULL;
+            }
+            pNtk_tmp = Abc_FrameReadNtk(pAbc);
+            if(pNtk_core == NULL)
+                pNtk_core = Abc_NtkDup(pNtk_tmp);
+            else
+                Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
+        }
+        _end_time = Abc_Clock();
+        Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
+        if(Cmd_CommandExecute(pAbc,minimizeCommand))
+        {
+            printf("Minimize %s. Failed.\n", tmpFileName);
+            return NULL;
+        }
+        pNtk_core = Abc_FrameReadNtk(pAbc);
+        _time_core = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        _gate_core = Abc_NtkNodeNum(pNtk_core);
+        printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
+    }
+    
+    if(fSolving != (REENCODE || HEURISTIC_EACH))
+    {
+        _time_icompact = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+        printf("==========================\n");
+        printf("icompact computation time: %9.2f\n", _time_icompact);
+        printf("icompact result: %i / %i\n", result, _nPi);
+        for(int i=0; i<_nPi; i++)
+            if(_litPi[i])
+                printf("%i ", i);
+        printf("\n");
+    }
+
+    return result;
+}
+
+/////////////////////////////////////////////////////////
+// 
+/////////////////////////////////////////////////////////
 
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo)
 {
@@ -187,71 +359,6 @@ int espresso_input_count(char* filename)
     return count;
 }
 
-int output_compaction_naive(char* plaFile, char* reencodeplaFile, char* outputmapping)
-{
-    int nRPo;
-    FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
-    FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
-    FILE* fMapping  = fopen(outputmapping, "w");   // .i .o .type fr
-    char buff[102400];
-    char* t;
-    int count = 0;
-    std::map<std::string, int> mapping;
-
-    fgets(buff, 102400, ff);
-    fgets(buff, 102400, ff);
-    fgets(buff, 102400, ff);
-    while(fgets(buff, 102400, ff))
-    {
-        t = strtok(buff, " \n");
-        t = strtok(NULL, " \n");
-        std::string s(t);
-        if(mapping.count(s) == 0)
-        {
-            mapping[s] = count;
-            count++;
-        }        
-    }
-    fclose(ff);
-
-    nRPo = 64 - __builtin_clzll(count);
-    char* one_line = new char[nRPo+1];
-    one_line[nRPo] = '\0';
-    int encoding;
-    ff = fopen(plaFile, "r");
-    fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, ".i %i\n", nRPo);
-    fgets(buff, 102400, ff);
-    fprintf(fReencode, ".o %i\n", nRPo);
-    fprintf(fMapping, "%s", buff);
-    fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, "%s", buff);
-    while(fgets(buff, 102400, ff))
-    {
-        t = strtok(buff, " \n");
-        fprintf(fReencode, "%s ", t);
-        t = strtok(NULL, " \n");
-        std::string s(t);
-        encoding = mapping[s];
-        for(int i=0; i<nRPo; i++)
-        {
-            int rbit = encoding%2;
-            one_line[i] = (rbit)? '1': '0';
-            encoding = encoding >> 1;
-        }
-        fprintf(fReencode, "%s\n", one_line);
-        fprintf(fMapping, "%s %s\n", one_line, t);
-    }
-
-    // clean up
-    fclose(ff);
-    fclose(fReencode);
-    fclose(fMapping);
-    return nRPo;
-}
-
 int aux_genReducedPla(int nPi, int poIdx, char* originalFilename, char* outputFilename)
 {
     char buff[102400];
@@ -418,22 +525,6 @@ Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate
     return pNtk;
 }
 
-/////////////////////////////////////////////////////////
-// Aux functions
-/////////////////////////////////////////////////////////
-void IcompactMgr::setFilenames(char *baseFileName)
-{
-    sprintf(_samplesplaFileName,      "%s.samples.pla",   baseFileName);
-    sprintf(_reducedplaFileName,      "%s.reduced.pla",   baseFileName);
-    sprintf(_outputreencodedFileName, "%s.oreencode.pla", baseFileName);
-    sprintf(_outputmappingFileName,   "%s.omap.pla",      baseFileName);
-    sprintf(_inputreencodedFileName,  "%s.ireencode.pla", baseFileName);
-    sprintf(_inputmappingFileName,    "%s.imap.pla",      baseFileName);
-    sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
-    sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
-    sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
-}
-
 void get_support_ori(Abc_Ntk_t* pNtk, int nPi, int nPo, int** supportInfo)
 {
     assert(Abc_NtkCiNum(pNtk) == nPi);
@@ -467,125 +558,132 @@ void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo)
 }
 
 /////////////////////////////////////////////////////////
-// Input compact methods
+// Aux functions
 /////////////////////////////////////////////////////////
-int IcompactMgr::icompact_cube(SolvingType fSolving, double fRatio, int fNewVar)
+
+int IcompactMgr::check_pla_pipo(char *pFileName)
 {
-    int result;
     char buff[102400];
     char* t;
+    FILE* fPla = fopen(pFileName, "r");
 
-    // initial checkings
-    int nLitPo = 0;
-    for(int i=0; i<_nPo; i++)
-        if(_litPo[i]) { nLitPo++; }
-    if(nLitPo == 0) { printf("icompact_cube: Cared output size zero: *litPo must be specified\n"); return -1; }
-
-    FILE* fPla = fopen(_workingFileName, "r");
     fgets(buff, 102400, fPla);
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
-    assert(atoi(t) == _nPi);
+    if(atoi(t) != _nPi) { fclose(fPla); return 1; }
     fgets(buff, 102400, fPla);
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
-    assert(atoi(t) == _nPo);
-    fclose(fPla);
-
-    if(fSolving == HEURISTIC_SINGLE)
-    {
-        _step_time = Abc_Clock();
-        result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
-        _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
-    }
-    else if(fSolving == HEURISTIC_8)
-    {
-        _step_time = Abc_Clock();
-        result = icompact_cube_heuristic(_workingFileName, 8, fRatio);
-        _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
-    }
-    else if(fSolving == LEXSAT_CLASSIC)
-    {
-        _step_time = Abc_Clock();
-        result = icompact_cube_main(pNtk_sample, pNtk_careset);
-        _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);     
-    }
-    else if(fSolving == LEXSAT_ENCODE_C)
-    {        
-        _step_time = Abc_Clock();
-        result = icompact_cube_direct_encode_with_c(_workingFileName, pNtk_careset, _forqesFileName, _forqesCareFileName, _MUSFileName);
-        _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
-    }
-    else if(fSolving == REENCODE)
-    {
-        _step_time = Abc_Clock();
-        recordPi = new int[_nPi];
-        result = icompact_cube_reencode(_workingFileName, inputmappingFileName, inputreencodedFileName, 1, fNewVar, recordPi);
-        _end_time = Abc_Clock();
-        _time_ireencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-        printf("reencode computation time: %9.2f\n", _time_ireencode);
-        printf("Input compacted to %i / %i\n", result, _nPi);
-    }
-    else if(fSolving == HEURISTIC_EACH)
-    {
-        _step_time = Abc_Clock();
-        for(int i=0; i<workingPo; i++)
-        {
-            for(int k=0; k<workingPo; k++)
-                _litPo[k] = 0;
-            _litPo[i] = 1;
-
-            result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
-            assert(result > 0);
-            writeCompactpla(tmpFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, i);
-            sprintf( Command, "read %s; strash", tmpFileName);
-            if(Cmd_CommandExecute(pAbc,Command))
-            {
-                printf("Cannot read %s\n", tmpFileName);
-                return NULL;
-            }
-            if(Cmd_CommandExecute(pAbc,minimizeCommand))
-            {
-                printf("Minimize %s. Failed.\n", tmpFileName);
-                return NULL;
-            }
-            pNtk_tmp = Abc_FrameReadNtk(pAbc);
-            if(pNtk_core == NULL)
-                pNtk_core = Abc_NtkDup(pNtk_tmp);
-            else
-                Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
-        }
-        _end_time = Abc_Clock();
-        Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
-        if(Cmd_CommandExecute(pAbc,minimizeCommand))
-        {
-            printf("Minimize %s. Failed.\n", tmpFileName);
-            return NULL;
-        }
-        pNtk_core = Abc_FrameReadNtk(pAbc);
-        _time_core = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-        _gate_core = Abc_NtkNodeNum(pNtk_core);
-        printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
-    }
+    if(atoi(t) != _nPo) { fclose(fPla); return 1; }
     
-    if(fSolving != (REENCODE || HEURISTIC_EACH))
-    {
-        _time_icompact = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-        printf("==========================\n");
-        printf("icompact computation time: %9.2f\n", _time_icompact);
-        printf("icompact result: %i / %i\n", result, _nPi);
-        for(int i=0; i<_nPi; i++)
-            if(_litPi[i])
-                printf("%i ", i);
-        printf("\n");
-    }
-
+    fclose(fPla);
     return 0;
 }
+
+/////////////////////////////////////////////////////////
+// Ntk Functions
+/////////////////////////////////////////////////////////
+void IcompactMgr::getNtk_func()
+{
+    _pNtk_func = Io_Read(_funcFileName, Io_ReadFileType(_funcFileName), 1, 0);
+    _pNtk_func = Abc_NtkToLogic(_pNtk_func);
+    _pNtk_func = Abc_NtkStrash(_pNtk_func, 0, 0, 0);
+    // set _oriPi, _oriPo
+    _oriPi = Abc_NtkPiNum(_pNtk_func);
+    _oriPo = Abc_NtkPoNum(_pNtk_func);
+}
+
+// Caution: may result in huge Ntk. Batching added later.
+Abc_Ntk_t * IcompactMgr::getNtk_samples(int fMinimize, int fCollapse)
+{
+    if(_pNtk_samples != NULL)
+        return _pNtk_samples;
+    _pNtk_samples = Io_Read(_samplesplaFileName, Io_ReadFileType(_samplesplaFileName), 1, 0);
+    _pNtk_samples = Abc_NtkToLogic(_pNtk_samples);
+    _pNtk_samples = Abc_NtkStrash(_pNtk_samples, 0, 0, 0);
+    _pNtk_samples = ntkMinimize(_pNtk_samples, fMinimize, fCollapse);
+    return _pNtk_samples;
+}
+
+// Caution: may result in huge Ntk. Batching added later.
+// .type fr treat unseen patterns as don't care
+Abc_Ntk_t * IcompactMgr::getNtk_careset(int fMinimize, int fCollapse, int fBatch)
+{
+    if(_pNtk_careset != NULL)
+        return _pNtk_careset;
+    _pNtk_careset = Io_Read(_caresetFileName, Io_ReadFileType(_caresetFileName), 1, 0);
+    _pNtk_careset = Abc_NtkToLogic(_pNtk_careset);
+    _pNtk_careset = Abc_NtkStrash(_pNtk_careset, 0, 0, 0);
+    _pNtk_careset = ntkMinimize(_pNtk_careset, fMinimize, fCollapse);
+    return _pNtk_careset;
+}
+
+// Currently uses _pAbc to execute minimization commands
+// .type fd treat unseen patterns as offset
+Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse)
+{
+    // minimization commands
+    char strongCommand[500]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
+    char collapseCommand[500] = "collapse";
+    char minimizeCommand[500] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
+                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
+                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
+                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
+                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
+    Abc_FrameReplaceCurrentNetwork(_pAbc, pNtk);
+    if(fMinimize == STRONG)
+    {
+        if(Cmd_CommandExecute(_pAbc,strongCommand))
+            return NULL;
+    }
+    if(fCollapse)
+    {
+        if(Cmd_CommandExecute(_pAbc,collapseCommand))
+            return NULL;
+    }
+    if(fMinimize != NOMIN)
+    {
+        if(Cmd_CommandExecute(_pAbc,minimizeCommand))
+            return NULL;
+    }
+    pNtk = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
+    return pNtk;
+}
+
+// // ntkBatch() not used
+// // fMode = 1 for samples, 0 for careset // 
+// Abc_Ntk_t * IcompactMgr::ntkBatch(int fMode, int fBatch)
+// {
+//     char Command[2000];
+//     if(fMode)
+//     {
+//         _step_time = Abc_Clock();
+//         sprintf(Command, "readplabatch %i %s", fBatch, _samplesplaFileName);
+//         if(Cmd_CommandExecute(_pAbc,Command))
+//             return NULL;
+//         _pNtk_samples = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
+//         _end_time = Abc_Clock();
+//         _gate_batch = Abc_NtkNodeNum(_pNtk_samples);
+//         _time_batch = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+//         return _pNtk_samples;
+//     }
+//     else
+//     {
+//         _step_time = Abc_Clock();
+//         sprintf(Command, "readplabatch %i %s", fBatch, _caresetFileName);
+//         if(Cmd_CommandExecute(_pAbc,Command))
+//             return NULL;
+//         _pNtk_careset = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
+//         _end_time = Abc_Clock();
+//         _gate_batch = Abc_NtkNodeNum(_pNtk_careset);
+//         _time_batch = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+//         return _pNtk_careset;
+//     }      
+// }
+
+/////////////////////////////////////////////////////////
+// Input compact methods
+/////////////////////////////////////////////////////////
 
 /*== base/abci/abcDar.c ==*/
 extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
@@ -701,6 +799,82 @@ void sat_solver_print( sat_solver* pSat, int fDimacs )
                      i + (int)(fDimacs>0),
                      (fDimacs) ? " 0" : "");
     printf( "\n" );
+}
+
+int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double ratio)
+{
+    int result;
+    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr();
+    mgr->readFile(plaFile);
+    mgr->lockEntry(ratio);
+
+    size_t maskCount, minMaskCount;
+    char *mask, *minMask;
+    vector<size_t> varOrder;
+
+    // solve
+    mask = new char[_nPi+1];
+    mask[_nPi] = '\0';
+    minMaskCount = _nPi;
+    minMask = new char[_nPi+1];
+    minMask[_nPi] = '\0';
+    for(size_t i=0; i<_nPi; i++)
+        varOrder.push_back(i);
+
+    for(int iter=0; iter<iterNum; iter++)
+    {
+        printf("Solve heuristic - iter %i\n", iter);
+        random_shuffle(varOrder.begin(), varOrder.end());
+        random_shuffle(varOrder.begin(), varOrder.end());        
+#ifdef DEBUG
+        for(size_t i=0; i<nPi; i++)
+            cout << varOrder[i] << " ";
+        cout << endl;
+#endif
+        for(size_t i=0; i<_nPi; i++)
+            mask[i] = '1';
+        for(size_t i=0; i<_nPi; i++)
+        {
+            size_t test = varOrder[i];
+            if(mgr->getLocked(test))
+                continue;
+            mask[test] = '0'; // drop var
+            mgr->maskOne(test);
+            if(mgr->findConflict(_litPo))
+            {
+                mask[test] = '1'; // preserve var
+                mgr->undoOne();
+            }        
+        }
+        maskCount = _nPi;
+        for(size_t i=0; i<_nPi; i++)
+            if(mask[i] == '0')
+                maskCount--; 
+        if(maskCount <= minMaskCount)
+        {
+            minMaskCount = maskCount;
+            for(int i=0; i<_nPi; i++)
+                minMask[i] = mask[i];
+        }
+    }
+
+    // report
+    for(size_t i=0; i<_nPi; i++)
+        _litPi[i] = 0;
+    result = 0;
+    for(size_t i=0; i<_nPi; i++)
+    {
+        if(minMask[i] == '1')
+        {
+            _litPi[i] = 1;
+            result++;
+        }
+    }
+
+    // clean up
+    delete [] mask;
+    delete [] minMask;
+    return result;
 }
 
 int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset)
@@ -1485,83 +1659,77 @@ int IcompactMgr::icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t*
     return result;
 }
 
-int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double ratio)
+/////////////////////////////////////////////////////////
+// Reencode Methods
+/////////////////////////////////////////////////////////
+
+// less arguements later.
+int IcompactMgr::reencode_naive(char* plaFile, char* reencodeplaFile, char* outputmapping)
 {
-    int result;
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr();
-    mgr->readFile(plaFile);
-    mgr->lockEntry(ratio);
+    int nRPo;
+    FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
+    FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
+    FILE* fMapping  = fopen(outputmapping, "w");   // .i .o .type fr
+    char buff[102400];
+    char* t;
+    int count = 0;
+    std::map<std::string, int> mapping;
 
-    size_t maskCount, minMaskCount;
-    char *mask, *minMask;
-    vector<size_t> varOrder;
-
-    // solve
-    mask = new char[_nPi+1];
-    mask[_nPi] = '\0';
-    minMaskCount = _nPi;
-    minMask = new char[_nPi+1];
-    minMask[_nPi] = '\0';
-    for(size_t i=0; i<_nPi; i++)
-        varOrder.push_back(i);
-
-    for(int iter=0; iter<iterNum; iter++)
+    fgets(buff, 102400, ff);
+    fgets(buff, 102400, ff);
+    fgets(buff, 102400, ff);
+    while(fgets(buff, 102400, ff))
     {
-        printf("Solve heuristic - iter %i\n", iter);
-        random_shuffle(varOrder.begin(), varOrder.end());
-        random_shuffle(varOrder.begin(), varOrder.end());        
-#ifdef DEBUG
-        for(size_t i=0; i<nPi; i++)
-            cout << varOrder[i] << " ";
-        cout << endl;
-#endif
-        for(size_t i=0; i<_nPi; i++)
-            mask[i] = '1';
-        for(size_t i=0; i<_nPi; i++)
+        t = strtok(buff, " \n");
+        t = strtok(NULL, " \n");
+        std::string s(t);
+        if(mapping.count(s) == 0)
         {
-            size_t test = varOrder[i];
-            if(mgr->getLocked(test))
-                continue;
-            mask[test] = '0'; // drop var
-            mgr->maskOne(test);
-            if(mgr->findConflict(_litPo))
-            {
-                mask[test] = '1'; // preserve var
-                mgr->undoOne();
-            }        
-        }
-        maskCount = _nPi;
-        for(size_t i=0; i<_nPi; i++)
-            if(mask[i] == '0')
-                maskCount--; 
-        if(maskCount <= minMaskCount)
-        {
-            minMaskCount = maskCount;
-            for(int i=0; i<_nPi; i++)
-                minMask[i] = mask[i];
-        }
+            mapping[s] = count;
+            count++;
+        }        
     }
+    fclose(ff);
 
-    // report
-    for(size_t i=0; i<_nPi; i++)
-        _litPi[i] = 0;
-    result = 0;
-    for(size_t i=0; i<_nPi; i++)
+    nRPo = 64 - __builtin_clzll(count);
+    char* one_line = new char[nRPo+1];
+    one_line[nRPo] = '\0';
+    int encoding;
+    ff = fopen(plaFile, "r");
+    fgets(buff, 102400, ff);
+    fprintf(fReencode, "%s", buff);
+    fprintf(fMapping, ".i %i\n", nRPo);
+    fgets(buff, 102400, ff);
+    fprintf(fReencode, ".o %i\n", nRPo);
+    fprintf(fMapping, "%s", buff);
+    fgets(buff, 102400, ff);
+    fprintf(fReencode, "%s", buff);
+    fprintf(fMapping, "%s", buff);
+    while(fgets(buff, 102400, ff))
     {
-        if(minMask[i] == '1')
+        t = strtok(buff, " \n");
+        fprintf(fReencode, "%s ", t);
+        t = strtok(NULL, " \n");
+        std::string s(t);
+        encoding = mapping[s];
+        for(int i=0; i<nRPo; i++)
         {
-            _litPi[i] = 1;
-            result++;
+            int rbit = encoding%2;
+            one_line[i] = (rbit)? '1': '0';
+            encoding = encoding >> 1;
         }
+        fprintf(fReencode, "%s\n", one_line);
+        fprintf(fMapping, "%s %s\n", one_line, t);
     }
 
     // clean up
-    delete [] mask;
-    delete [] minMask;
-    return result;
+    fclose(ff);
+    fclose(fReencode);
+    fclose(fMapping);
+    return nRPo;
 }
 
-int IcompactMgr::icompact_cube_reencode(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record)
+int IcompactMgr::reencode_heuristic(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record)
 {
     int nRPo, lineNum;
     FILE* ff      = fopen(plaFile, "r");         // .i .o .type fr
