@@ -39,18 +39,40 @@ class IcompactMgr
 {
 public:
     IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFileName, char *baseFileName, char *resultlogFileName);
-    ~IcompactMgr() {}
-    void ocompact(int fOutput, int fNewVar);
+    ~IcompactMgr();
+
+    // main functions
+    int ocompact(int fOutput, int fNewVar);
     int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch);
+
+    // get ntk functions
+    Abc_Ntk_t * getNtkImap(); // later
+    Abc_Ntk_t * getNtkCore(); // later
+    Abc_Ntk_t * getNtkOmap(); // later
+
+    // support functions
+    void getSupportInfoFunc(); // later
+    void getSupportInfoPatt(); // later
+
+    // each cone functions
+    void getEachConeFunc(); // later
+    void getEachConePatt(); // later
 
 private:
     bool _fIcompact, _fOcompact;
+    bool _fSupportFunc, _fSupportPatt;
     
-    // int _nPi, _nPo;
-    // bool *_litPi, *_litPo;
-    int _nRPi, _nRPo; // compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
+    int _nPi, _nPo;
+    bool *_litPi, *_litPo;
+    int _nRPi, _nRPo; // Output Compaction & Input Reencoding results
     bool *_litRPi, *_litRPo;
     abctime _step_time, _end_time;
+
+    // support set
+    int ** _supportInfo_func;
+    int ** _supportInfo_patt;
+    void supportInfo_Func();
+    void supportInfo_Patt();
 
     Abc_Frame_t * _pAbc;
     char *_funcFileName;
@@ -88,6 +110,8 @@ private:
     double _time_imap, _time_core, _time_omap, _time_batch; // minimization time for each sub-circuit
 
     // aux functions
+    void resetWorkingLitPi();
+    void resetWorkingLitPo();
     int getWorkingPiNum() { return (_fIcompact)? _nRPi: _nPi; }
     int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
     bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
@@ -111,12 +135,8 @@ private:
     int reencode_heuristic(char* reencodeplaFile, char* mapping, bool type, int newVar, int* record);
 };
 
-
-extern Abc_Ntk_t* get_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time);
-extern Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time, int nPi, int nPo, int *litPo);
-
 // two get_support functions has different po order, sort ori to match pla order.
-// check get_support_pat, support sizes are greater than expexted 
+// check get_support_pat, support sizes are greater than expected 
 extern void get_support_ori(Abc_Ntk_t* pNtk, int nPi, int nPo, int** supportInfo);
 extern void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo);
 
@@ -132,7 +152,7 @@ void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
 
 // icompactUtil.cpp
 extern int espresso_input_count(char* filename);
-
+extern int check_pla_pipo(char *pFileName, int nPi, int nPo);
 
 ABC_NAMESPACE_HEADER_END
 #endif

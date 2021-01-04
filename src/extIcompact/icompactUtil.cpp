@@ -68,4 +68,48 @@ int check_pla_pipo(char *pFileName, int nPi, int nPo)
     return 0;
 }
 
+void aux_orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo)
+{
+    Vec_Ptr_t * vPis, * vPos;
+    Abc_Obj_t * pObj;
+    int i;
+    char s[1024];
+
+    // temporarily store the names in the copy field
+    Abc_NtkForEachPi( pNtk, pObj, i )
+        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
+    Abc_NtkForEachPo( pNtk, pObj, i )
+        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
+
+    vPis = Vec_PtrAlloc(0);
+    vPos = Vec_PtrAlloc(0);
+    for (i=0; i<nPi; i++)
+    {
+        sprintf(s, "i%i", i);
+        pObj = Abc_NtkFindCi( pNtk, s );
+        if(pObj == NULL)
+        {
+            pObj = Abc_NtkCreatePi(pNtk);
+            Abc_ObjAssignName(pObj, s, NULL);
+        }
+        Vec_PtrPush( vPis, pObj );
+    }
+    for (i=0; i<nPo; i++)
+    {
+        sprintf(s, "o%i", i);
+        pObj = Abc_NtkFindCo( pNtk, s );
+        Vec_PtrPush( vPos, pObj );
+    }
+    pNtk->vPis = vPis;
+    pNtk->vPos = vPos;
+
+    Abc_NtkOrderCisCos( pNtk );
+    // clean the copy fields
+    Abc_NtkForEachPi( pNtk, pObj, i )
+        pObj->pCopy = NULL;
+    Abc_NtkForEachPo( pNtk, pObj, i )
+        pObj->pCopy = NULL;
+}
+
+
 ABC_NAMESPACE_IMPL_END

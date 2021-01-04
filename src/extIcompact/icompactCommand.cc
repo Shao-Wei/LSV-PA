@@ -7,9 +7,6 @@
 
 ABC_NAMESPACE_IMPL_START
 
-// base/abci/abcStrash.c
-extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
-
 static Abc_Ntk_t * DummyFunction( Abc_Ntk_t * pNtk )
 {
     Abc_Print( -1, "Please rewrite DummyFunction() in file \"icompactCommand.cc\".\n" );
@@ -134,15 +131,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     char *caresetFileName;
     char *baseFileName;
     char *resultlogFileName;
-
-    int *recordPi, *recordPo;
-    int nRPo;                   // compacted nPo
-    char workingFileName[1000]; // switch between outputsamplesFileName / outputreplacedFileName (-o)
-    int workingPo;              // switch between nPo / nRPo (-o) 
-
-    int** supportInfo_original; // support of original circuit (get input cone)
-    int** supportInfo_pattern;  // support derived from input patterns
-    
+   
     // == Parse command ======================
     Extra_UtilGetoptReset();
     while ( ( c = Extra_UtilGetopt( argc, argv, "eosmlnycrpvh" ) ) != EOF )
@@ -208,161 +197,18 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     baseFileName = argv[globalUtilOptind];
     globalUtilOptind++;
 
+    /////////////////////////////////////////////////////////
+    // Start Main
+    /////////////////////////////////////////////////////////
     printf("[Info] IcompactMgr start\n");
     IcompactMgr *mgr = new IcompactMgr(pAbc, funcFileName, caresetFileName, baseFileName, resultlogFileName);
     mgr->ocompact(fOutput, fNewVar);
     mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch);
 
-    // get support info
-    if(fSupport)
-    {
-        supportInfo_original = new int*[nPo];
-        for(int i=0; i<nPo; i++)
-            supportInfo_original[i] = new int[nPi];
-        get_support_ori(pNtk_func, nPi, nPo, supportInfo_original);
-
-        supportInfo_pattern = new int*[nPo];
-        for(int i=0; i<nPo; i++)
-            supportInfo_pattern[i] = new int[nPi];
-        get_support_pat(samplesplaFileName, nPi, nPo, supportInfo_pattern);
-
-        if(fLog)
-        {
-            fresultlog = fopen(resultlogFileName, "a");
-            fprintf(fresultlog, "Original circuit support info");
-            for(int i=0; i<nPo; i++)
-            {
-                int count = 0;
-                for(int j=0; j<nPi; j++)
-                    if(supportInfo_original[i][j])
-                        count++;
-                fprintf(fresultlog, ",%i", count);
-            }
-            fprintf(fresultlog, "\nPattern circuit support info");
-            for(int i=0; i<nPo; i++)
-            {
-                int count = 0;
-                for(int j=0; j<nPi; j++)
-                    if(supportInfo_pattern[i][j])
-                        count++;
-                fprintf(fresultlog, ",%i", count);
-            }
-            fprintf(fresultlog, "\n");
-            fclose(fresultlog);
-        }
-        return result;
-    }
-
-    // init litPi
-    litPi = new bool[nPi];
-    for(int i=0; i<nPi; i++)
-        litPi[i] = 0;
-
-    // init litPo; set to fullPo mode
-    litPo = new bool[workingPo];
-    for(int i=0; i<workingPo; i++)
-        litPo[i] = 1;
-
-    // =======================================
-    // Solving
-    // =======================================
-    /**
-    printf("Start working on reduced pla.\n");
-    for(int i=0; i<workingPo; i++)
-    {
-        for(int k=0; k<workingPo; k++)
-            litPo[k] = 0;
-        litPo[i] = 1;
-
-        result = icompact_cube_heuristic(reducedplaFileName, 1, fRatio, result, workingPo, litPi, litPo);
-        assert(result > 0);
-        writeCompactpla(tmpFileName, reducedplaFileName, result, litPi, workingPo, litPo, i);
-        sprintf( Command, "read %s; strash", tmpFileName);
-        if(Cmd_CommandExecute(pAbc,Command))
-        {
-            printf("Cannot read %s\n", tmpFileName);
-            return NULL;
-        }
-        if(Cmd_CommandExecute(pAbc,minimizeCommand))
-        {
-            printf("Minimize %s. Failed.\n", tmpFileName);
-            return NULL;
-        }
-        pNtk_tmp = Abc_FrameReadNtk(pAbc);
-        if(pNtk_core == NULL)
-            pNtk_core = Abc_NtkDup(pNtk_tmp);
-        else
-            Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
-    }
-    end_time = Abc_Clock();
-    Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
-    if(Cmd_CommandExecute(pAbc,minimizeCommand))
-    {
-        printf("Minimize %s. Failed.\n", tmpFileName);
-        return NULL;
-    }
-    pNtk_core = Abc_FrameReadNtk(pAbc);
-    time_core = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-    gate_core = Abc_NtkNodeNum(pNtk_core);
-    printf("time: %9.2f; gate: %i\n", time_core, gate_core);
-    **/
-    ////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////
+    // Print Evaluation
+    /////////////////////////////////////////////////////////
     printf("Print output files & evaluation\n");
-    
-    if(fSolving == REENCODE)
-    {
-        pNtk_imap = get_part_ntk(pAbc, inputmappingFileName, "Input mapping", gate_imap, time_imap, nPi, result, recordPi);
-        pNtk_core = get_ntk(pAbc, inputreencodedFileName, "Core circuit", gate_core, time_core);
-    }
-    else if(fSolving == NONE) 
-        pNtk_core = get_ntk(pAbc, samplesplaFileName, "Core circuit", gate_core, time_core);
-    else if(fSolving != HEURISTIC_EACH)
-        pNtk_core = get_ntk(pAbc, reducedplaFileName, "Core circuit", gate_core, time_core);
-
-    if(fOutput == 1)
-        pNtk_omap = get_ntk(pAbc, outputmappingFileName, "Output mapping", gate_omap, time_omap);
-    else if(fOutput == 2)
-        pNtk_omap = get_part_ntk(pAbc, outputmappingFileName, "Output mapping", gate_omap, time_omap, nRPo, nPo, recordPo);
-
-    ////////////////////////////////////////////////////////
-    if(fLog && !fEach)
-    {
-        fresultlog = fopen(resultlogFileName, "a");
-        if(fSolving == REENCODE)
-            fprintf( fresultlog, "%s,%i,%i,%9.2f,%i,%9.2f,%i,%9.2f,%i,%i,%9.2f,%i,%9.2f,\n", funcFileName, fSolving, result, time_icompact, gate_imap, time_imap, gate_core, time_core, fNewVar, nRPo, time_oreencode, gate_omap, time_omap);
-        else if(fSolving == NONE)
-            fprintf( fresultlog, "%s,%i,%i,    -, -,    -,%i,%9.2f, -, -,    -, -,    -,\n", funcFileName, fSolving, result,                                      gate_core, time_core                                                     );    
-        else
-            fprintf( fresultlog, "%s,%i,%i,%9.2f, -,    -,%i,%9.2f,%i,%i,%9.2f,%i,%9.2f,\n", funcFileName, fSolving, result, time_icompact,                       gate_core, time_core, fNewVar, nRPo, time_oreencode, gate_omap, time_omap);    
-        fclose(fresultlog);
-    }
-
-    if(fEach) // report size of cone of each PO
-    {
-        fresultlog = fopen(resultlogFileName, "a");
-        // original cone size
-        fprintf(fresultlog, "pNtk_func");
-        Abc_Ntk_t* pCone;
-        Abc_Obj_t* pPo;
-        int i;
-        Abc_NtkForEachCi(pNtk_func, pPo, i)
-        {
-            pCone = Abc_NtkCreateCone(pNtk_func, pPo, Abc_ObjName(pPo), 0);
-            fprintf(fresultlog, ",%i", Abc_NtkNodeNum(pCone));
-        }
-        fprintf(fresultlog, "\n");
-
-        // compacted cone size
-        Abc_Ntk_t* pPutOnTop;
-        pPutOnTop = Abc_NtkPutOnTop(pNtk_core, pNtk_omap);
-        Abc_NtkForEachCi(pPutOnTop, pPo, i)
-        {
-            pCone = Abc_NtkCreateCone(pPutOnTop, pPo, Abc_ObjName(pPo), 0);
-            fprintf(fresultlog, ",%i", Abc_NtkNodeNum(pCone));
-        }
-        fprintf(fresultlog, "\n");
-        fclose(fresultlog);
-    }
 
     ////////////////////////////////////////////////////////
     return result;
@@ -798,137 +644,6 @@ usage:
     return 1;   
 }
 
-static int getreduced_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
-{
-    int result       = 0;
-    int c            = 0;
-    int fVerbose     = 0;
-    int fShift       = 1;
-
-    char* plafileName, *specfileName;
-    FILE* ff;
-    char buff[102400];
-    char* t;
-    std::vector<std::vector<int> >spec;
-    int nPi, nPo;
-    bool *litPi, *litPo;
-    int i, j, num;
-
-    char Command[1000];
-    /*
-    char strongCommand[1000]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
-    char collapseCommand[1000] = "collapse";
-    char minimizeCommand[1000] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
-                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
-                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
-                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
-                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
-    */
-    Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "vhs" ) ) != EOF )
-    {
-        switch ( c )
-        {            
-            case 's':
-                fShift ^= 1;
-                break;
-            case 'v':
-                fVerbose ^= 1;
-                break;
-            case 'h':
-                goto usage;
-            default:
-                goto usage;
-        }
-    }
-
-    if ( argc != globalUtilOptind + 2 )
-        goto usage;
-    // get the input file name
-    plafileName = argv[globalUtilOptind];
-    globalUtilOptind++;
-    specfileName = argv[globalUtilOptind];
-
-    ff = fopen(plafileName, "r");
-    fgets(buff, 102400, ff);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    nPi = atoi(t);
-    fgets(buff, 102400, ff);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    nPo = atoi(t);
-    fclose(ff);
-
-    // init litPi
-    litPi = new bool[nPi];
-    litPo = new bool[nPo];
-    for(int i=0; i<nPo; i++)
-        litPo[i] = 1;
-
-    ff = fopen(specfileName, "r");
-    while(fgets(buff, 102400, ff))
-    {
-        // printf("%s", buff);
-        if(buff[0] == '\n')
-            continue;           
-        t = strtok(buff, " \n");
-        if(t[0] == 'v')
-        {
-            std::vector<int> tmp;
-            while(true)
-            {
-                t = strtok(NULL, " \n");
-                if(t == NULL)
-                    break;
-                else
-                {
-                    num = (fShift)? atoi(t)-1: atoi(t);
-                    if(num >= 0)
-                        tmp.push_back(num);
-                }    
-            }
-            spec.push_back(tmp);
-        }  
-    }
-    fclose(ff);
-
-    for(i=0; i<spec.size(); i++)
-    {
-        for(j=0; j<spec[i].size(); j++)
-            printf("%i ", spec[i][j]);
-        printf("\n");
-    }
-    
-    for(i=0; i<spec.size(); i++)
-    {
-        for(j=0; j<nPi; j++)
-            litPi[j] = 0;
-        for(j=0; j<spec[i].size(); j++)
-            litPi[spec[i][j]] = 1;
-        writeCompactpla("tmp.reduced.pla", plafileName, nPi, litPi, nPo, litPo, 0);
-
-        printf("[Info] checkesp ");
-        for(j=0; j<spec[i].size(); j++)
-            printf("%i ", spec[i][j]);
-        printf("\n");
-
-        sprintf( Command, "checkesp tmp.reduced.pla");
-        if(Cmd_CommandExecute(pAbc,Command))
-            printf("Cannot checkesp on %s\n", "tmp.reduced.pla");
-    }
-
-    return result;
-    
-usage:
-    Abc_Print( -2, "usage: getreduced sample.pla specFile\n" );
-    Abc_Print( -2, "\t              evaluate reduced pla\n" );
-    Abc_Print( -2, "\t-s            : shift index - start from 0 / 1 [default = %d]\n", fShift );
-    Abc_Print( -2, "\t-v            : verbosity [default = %d]\n", fVerbose );
-    Abc_Print( -2, "\t-h            : print the command usage\n" );
-    return 1;
-}
-
 // called during ABC startup
 static void init(Abc_Frame_t* pAbc)
 { 
@@ -937,7 +652,6 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
     Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "readplabatch", readplabatch_Command, 1); // helper
-    Cmd_CommandAdd( pAbc, "AlCom", "getreduced", getreduced_Command, 1); // helper
 }
 
 // called during ABC termination

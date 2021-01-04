@@ -40,21 +40,41 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFi
     _pNtk_core    = NULL;
     _pNtk_omap    = NULL;
 
+    _supportInfo_func = NULL;
+    _supportInfo_patt = NULL;
+
     // set _workingFileName to default sample file
     strncpy(_workingFileName, _samplesplaFileName, 500);
 
-    // set _pNtk_func, _oriPi, _oriPo
+    // set basics
     getNtk_func();
-    _nRPi = _nPi;
-    _nRPo = _nPo;
+    _litPi = new bool[_nPi];
+    _litPo = new bool[_nPo];
+    _nRPi = _nPi; // _litRPi built later
+    _nRPo = _nPo; // _litRPo built later
 
     // set flags
     _fIcompact = 0;
     _fOcompact = 0;
+    _fSupportFunc = 0;
+    _fSupportPatt = 0;
 }
 
-// fOutput = 1 naive, = 0 reencode
-void IcompactMgr::ocompact(int fOutput, int fNewVar)
+IcompactMgr::~IcompactMgr()
+{
+    if(_fSupportFunc)
+    {
+        // rm _supportInfo_func
+    }
+
+    if(_fSupportPatt)
+    {
+        // rm _supportInfo_patt
+    }
+}
+
+// returns _nRPo. fOutput = 1 naive, = 0 reencode
+int IcompactMgr::ocompact(int fOutput, int fNewVar)
 {
     if(_fOcompact) // do nothing
         return;
@@ -77,6 +97,7 @@ void IcompactMgr::ocompact(int fOutput, int fNewVar)
     strncpy(_workingFileName, _outputreencodedFileName, 500);
     _fOcompact = 1;
     delete [] recordPo;
+    return _nRPo;
 }
 
 int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch)
@@ -85,10 +106,12 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         return;
 
     int result;
-    assert(!check_pla_pipo(_workingFileName));
+    assert(!check_pla_pipo(_workingFileName, getWorkingPiNum(), getWorkingPoNum()));
 
     if(fSolving == HEURISTIC_SINGLE)
     {
+        resetWorkingLitPi();
+        resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_heuristic(1, fRatio);
         _end_time = Abc_Clock();
@@ -96,6 +119,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     }
     else if(fSolving == HEURISTIC_8)
     {
+        resetWorkingLitPi();
+        resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_heuristic(8, fRatio);
         _end_time = Abc_Clock();
@@ -105,6 +130,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     {
         getNtk_samples(fMinimize, fCollapse);
         getNtk_careset(fMinimize, fCollapse, fBatch);
+        resetWorkingLitPi();
+        resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_main();
         _end_time = Abc_Clock();
@@ -113,6 +140,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     else if(fSolving == LEXSAT_ENCODE_C)
     {        
         getNtk_careset(fMinimize, fCollapse, fBatch);
+        resetWorkingLitPi();
+        resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_direct_encode_with_c();
         _end_time = Abc_Clock();
@@ -121,6 +150,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     else if(fSolving == REENCODE)
     {
         int * recordPi = new int[_nPi];
+        resetWorkingLitPi();
+        resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = reencode_heuristic(_inputmappingFileName, _inputreencodedFileName, 1, fNewVar, recordPi);
         _end_time = Abc_Clock();
@@ -138,7 +169,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
             for(int k=0; k<nPo; k++)
                 litPo[k] = 0;
             litPo[i] = 1;
-
+            resetWorkingLitPi();
             result = icompact_heuristic(1, fRatio);
             assert(result > 0);
             writeCompactpla(_tmpFileName);
@@ -172,183 +203,108 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         printf("\n");
     }
 
+    _nRPi = result;
     return result;
 }
 
-/////////////////////////////////////////////////////////
-// Not handled
-/////////////////////////////////////////////////////////
-
-int aux_genReducedPla(int nPi, int poIdx, char* originalFilename, char* outputFilename)
+Abc_Ntk_t * IcompactMgr::getNtkImap()
 {
-    char buff[102400];
-    FILE *fcare = fopen(outputFilename, "w");
-    FILE *foriginal = fopen(originalFilename, "r");
-    char *one_line = new char[nPi + 3];
-    one_line[nPi + 2] = '\0';
-    one_line[nPi    ] = '|';
-    //header
-    fgets(buff, 102400, foriginal);
-    fgets(buff, 102400, foriginal);
-    fgets(buff, 102400, foriginal);
-
-    fprintf(fcare, ".i %i\n", nPi);
-    fprintf(fcare, ".o 1\n");
-    fprintf(fcare, ".ob o%i\n", poIdx);
-    fprintf(fcare, ".type fdr\n");
-
-    // body
-    while(fgets(buff, 102400, foriginal))
-    {
-        for(int i=0; i<nPi; i++)
-        {
-            one_line[i] = buff[i];
-        }
-        one_line[nPi + 1] = buff[nPi + 1 + poIdx];
-        fprintf(fcare, "%s\n", one_line);
-    }
-
-    fclose(fcare);
-    fclose(foriginal);
-    delete [] one_line;
-    return 0;
+    return NULL;
 }
 
-void aux_orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo)
+Abc_Ntk_t * IcompactMgr::getNtkCore()
 {
-    Vec_Ptr_t * vPis, * vPos;
-    Abc_Obj_t * pObj;
+    return NULL;
+}
+
+Abc_Ntk_t * IcompactMgr::getNtkOmap()
+{
+    return NULL;
+}
+
+void IcompactMgr::getSupportInfoFunc()
+{
+    supportInfo_Func();
+    printf("Report support info func\n");
+}
+
+void IcompactMgr::getSupportInfoPatt()
+{
+    supportInfo_Patt();
+    printf("Report support info patt\n");
+}
+
+void IcompactMgr::getEachConeFunc()
+{
+    Abc_Ntk_t* pCone;
+    Abc_Obj_t* pPo;
     int i;
-    char s[1024];
-
-    // temporarily store the names in the copy field
-    Abc_NtkForEachPi( pNtk, pObj, i )
-        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
-    Abc_NtkForEachPo( pNtk, pObj, i )
-        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
-
-    vPis = Vec_PtrAlloc(0);
-    vPos = Vec_PtrAlloc(0);
-    for (i=0; i<nPi; i++)
+    Abc_NtkForEachCi(_pNtk_func, pPo, i)
     {
-        sprintf(s, "i%i", i);
-        pObj = Abc_NtkFindCi( pNtk, s );
-        if(pObj == NULL)
-        {
-            pObj = Abc_NtkCreatePi(pNtk);
-            Abc_ObjAssignName(pObj, s, NULL);
-        }
-        Vec_PtrPush( vPis, pObj );
+        pCone = Abc_NtkCreateCone(_pNtk_func, pPo, Abc_ObjName(pPo), 0);
     }
-    for (i=0; i<nPo; i++)
-    {
-        sprintf(s, "o%i", i);
-        pObj = Abc_NtkFindCo( pNtk, s );
-        Vec_PtrPush( vPos, pObj );
-    }
-    pNtk->vPis = vPis;
-    pNtk->vPos = vPos;
-
-    Abc_NtkOrderCisCos( pNtk );
-    // clean the copy fields
-    Abc_NtkForEachPi( pNtk, pObj, i )
-        pObj->pCopy = NULL;
-    Abc_NtkForEachPo( pNtk, pObj, i )
-        pObj->pCopy = NULL;
 }
 
-Abc_Ntk_t* get_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time)
-{
-    int check;
-    abctime step_time, end_time;
-    Abc_Ntk_t *pNtk = NULL;
-    Abc_Ntk_t *pNtk_part = NULL;
-    char *tmpplaname = "tmp.pla";
-    char Command[2000];
-    char minimizeCommand[1000] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
-                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
-                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
-                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
-                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
+// base/abci/abcStrash.c
+extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
 
-    step_time = Abc_Clock();
-    sprintf( Command, "read %s; strash", plaFile);
-    if(Cmd_CommandExecute(pAbc,Command))
+void IcompactMgr::getEachConePatt()
+{
+    Abc_Ntk_t* pPutOnTop = Abc_NtkPutOnTop(_pNtk_core, _pNtk_omap);
+    Abc_Ntk_t* pCone;
+    Abc_Obj_t* pPo;
+    int i;
+    Abc_NtkForEachCi(pPutOnTop, pPo, i)
     {
-        printf("Cannot read %s\n", plaFile);
-        return NULL;
+        pCone = Abc_NtkCreateCone(pPutOnTop, pPo, Abc_ObjName(pPo), 0);
     }
-    if(Cmd_CommandExecute(pAbc,minimizeCommand))
-    {
-        printf("Minimize %s. Failed.\n", plaFile);
-        return NULL;
-    }
-    pNtk = Abc_FrameReadNtk(pAbc);
-    end_time = Abc_Clock();
-    
-    gate = Abc_NtkNodeNum(pNtk);
-    time = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-    printf("%s: size = %i; time = %f\n",log, gate, time);
-    return pNtk;
 }
 
-Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time, int nPi, int nPo, int *litPo)
+/////////////////////////////////////////////////////////
+// Aux functions
+/////////////////////////////////////////////////////////
+
+void IcompactMgr::resetWorkingLitPi()
 {
-    int check;
-    abctime step_time, end_time;
-    Abc_Ntk_t *pNtk = NULL;
-    Abc_Ntk_t *pNtk_part = NULL;
-    char *tmpplaname = "tmp.pla";
-    char Command[2000];
-    char minimizeCommand[1000] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
-                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
-                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
-                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
-                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
-    
-    step_time = Abc_Clock();
-    for(int i=0; i<nPo; i++)
+    if(_fIcompact)
     {
-        if(litPo[i] == -1)
-        {
-            check = aux_genReducedPla(nPi, i, plaFile, tmpplaname); 
-            assert(check == 0);
-            sprintf( Command, "read %s; strash", tmpplaname);
-            if(Cmd_CommandExecute(pAbc,Command))
-            {
-                printf("Cannot read %s\n", tmpplaname);
-                return NULL;
-            }
-            if(Cmd_CommandExecute(pAbc,minimizeCommand))
-            {
-                printf("Minimize %s. Failed.\n", tmpplaname);
-                return NULL;
-            }
-            pNtk_part = Abc_FrameReadNtk(pAbc);
-            if(pNtk == NULL)
-                pNtk = Abc_NtkDup(pNtk_part);
-            else
-                Abc_NtkAppend(pNtk, pNtk_part, 1);
-        }
-        else
-        {
-            // TODO
-            // add simple input - output
-            // Abc_NtkDupObj, Abc_NtkStartFrom
-        }
-    } 
-    end_time = Abc_Clock();
-    
-    gate = Abc_NtkNodeNum(pNtk);
-    time = 1.0*((double)(end_time - step_time))/((double)CLOCKS_PER_SEC);
-    printf("%s: size = %i; time = %f\n",log, gate, time);
-    return pNtk;
+        for(int i=0; i<_nRPi; i++)
+            _litRPi[i] = 0;
+    }
+    else
+    {
+        for(int i=0; i<_nPi; i++)
+            _litPi[i] = 0;
+    }
 }
 
-void get_support_ori(Abc_Ntk_t* pNtk, int nPi, int nPo, int** supportInfo)
+void IcompactMgr::resetWorkingLitPo()
 {
-    assert(Abc_NtkCiNum(pNtk) == nPi);
-    assert(Abc_NtkCoNum(pNtk) == nPo);
+    if(_fOcompact)
+    {
+        for(int i=0; i<_nRPo; i++)
+            _litRPo[i] = 0;
+    }
+    else
+    {
+        for(int i=0; i<_nPo; i++)
+            _litPo[i] = 0;
+    }
+}
+
+/////////////////////////////////////////////////////////
+// Support Set
+/////////////////////////////////////////////////////////
+// two get_support functions has different po order, sort ori to match pla order.
+// check get_support_pat, support sizes are greater than expected 
+void IcompactMgr::supportInfo_Func()
+{
+    // build _supportInfo_func
+    _supportInfo_func = new int*[_nPo];
+    for(int i=0; i<_nPo; i++)
+        _supportInfo_func[i] = new int[_nPi];
+    
+    Abc_Ntk_t* pNtk = _pNtk_func;
 
     Abc_Obj_t* pPo;
     Vec_Int_t* vecSup;
@@ -357,29 +313,39 @@ void get_support_ori(Abc_Ntk_t* pNtk, int nPi, int nPo, int** supportInfo)
     {
         vecSup = Abc_NtkNodeSupportInt(pNtk, i);
         for(int j=0, n = Vec_IntSize(vecSup); j<n; j++)
-            supportInfo[i][Vec_IntEntry(vecSup, j)] = 1;
+            _supportInfo_func[i][Vec_IntEntry(vecSup, j)] = 1;
     }
 }
 
-void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo)
+void IcompactMgr::supportInfo_Patt()
 {
+    if(_fIcompact || _fOcompact) // post-icompact/ocompact affects icompact_heuristic
+    {
+        printf("Does not support post-icompact/ocompact. Aborted.\n");
+        return;
+    }
+
     int result;
-    bool* litPi = new bool[nPi];
-    bool* litPo = new bool[nPo];
+    int nPi = getWorkingPiNum();
+    int nPo = getWorkingPoNum();
+    bool* litPi = getWorkingLitPi();
+    bool* litPo = getWorkingLitPo();
+
+    // build _supportInfo_patt
+    _supportInfo_patt = new int*[nPo];
+    for(int i=0; i<nPo; i++)
+        _supportInfo_patt[i] = new int[nPi];
+
     for(int i=0; i<nPo; i++)
     {
         for(int j=0; j<nPo; j++)
             litPo[j] = 0;
         litPo[i] = 1;
-        result = icompact_cube_heuristic(plaFile, 8, 0, nPi, nPo, litPi, litPo);
+        result = icompact_heuristic(8, 0);
         for(int j=0; j<nPi; j++)
-            supportInfo[i][j] = (litPi[j])? 1: 0;
+            _supportInfo_patt[i][j] = (litPi[j])? 1: 0;
     }
 }
-
-/////////////////////////////////////////////////////////
-// Aux functions
-/////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////
 // Ntk Functions
