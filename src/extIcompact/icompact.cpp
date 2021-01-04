@@ -45,8 +45,8 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFi
 
     // set _pNtk_func, _oriPi, _oriPo
     getNtk_func();
-    _nPi = _oriPi;
-    _nPo = _oriPo;
+    _nRPi = _nPi;
+    _nRPo = _nPo;
 
     // set flags
     _fIcompact = 0;
@@ -56,68 +56,73 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFi
 // fOutput = 1 naive, = 0 reencode
 void IcompactMgr::ocompact(int fOutput, int fNewVar)
 {
+    if(_fOcompact) // do nothing
+        return;
     if(fOutput = 0) // do nothing
         return;
 
-    int recordPo[_oriPo]; // used in reencode_heuristic
+    int * recordPo = new int[_nPo]; // used in reencode_heuristic, see later
     
     _step_time = Abc_Clock();
     if(fOutput == 1)
-        _nPo = reencode_naive(_samplesplaFileName, _outputreencodedFileName, _outputmappingFileName);
+        _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
     else
-        _nPo = reencode_heuristic(_samplesplaFileName, _outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
+        _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
     _end_time = Abc_Clock();
 
-    strncpy(_workingFileName, _outputreencodedFileName, 500);
     _time_oreencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     printf("reencode computation time: %9.2f\n", _time_oreencode);
-    printf("Output compacted to %i / %i\n", _nPo, _oriPo);
+    printf("Output compacted to %i / %i\n", _nRPo, _nPo);
+
+    strncpy(_workingFileName, _outputreencodedFileName, 500);
+    _fOcompact = 1;
+    delete [] recordPo;
 }
 
 int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch)
 {
+    if(_fIcompact)
+        return;
+
     int result;
     assert(!check_pla_pipo(_workingFileName));
-
-    // preconditions: 
-    // _workingFileName well set
-    // _nPo well set, compacted if output compacted
 
     if(fSolving == HEURISTIC_SINGLE)
     {
         _step_time = Abc_Clock();
-        result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+        result = icompact_heuristic(1, fRatio);
         _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, _nPo, _litPo, 0);
+        writeCompactpla(_reducedplaFileName);
     }
     else if(fSolving == HEURISTIC_8)
     {
         _step_time = Abc_Clock();
-        result = icompact_cube_heuristic(_workingFileName, 8, fRatio);
+        result = icompact_heuristic(8, fRatio);
         _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, _nPo, _litPo, 0);
+        writeCompactpla(_reducedplaFileName);
     }
     else if(fSolving == LEXSAT_CLASSIC)
     {
-        getNtk_sample();
-        getNtk_careset();
+        getNtk_samples(fMinimize, fCollapse);
+        getNtk_careset(fMinimize, fCollapse, fBatch);
         _step_time = Abc_Clock();
-        result = icompact_cube_main(pNtk_sample, pNtk_careset);
+        result = icompact_main();
         _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);     
+        writeCompactpla(_reducedplaFileName);
     }
     else if(fSolving == LEXSAT_ENCODE_C)
     {        
+        getNtk_careset(fMinimize, fCollapse, fBatch);
         _step_time = Abc_Clock();
-        result = icompact_cube_direct_encode_with_c(_workingFileName, pNtk_careset, _forqesFileName, _forqesCareFileName, _MUSFileName);
+        result = icompact_direct_encode_with_c();
         _end_time = Abc_Clock();
-        writeCompactpla(_reducedplaFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, 0);
+        writeCompactpla(_reducedplaFileName);
     }
     else if(fSolving == REENCODE)
     {
+        int * recordPi = new int[_nPi];
         _step_time = Abc_Clock();
-        recordPi = new int[_nPi];
-        result = icompact_cube_reencode(_workingFileName, inputmappingFileName, inputreencodedFileName, 1, fNewVar, recordPi);
+        result = reencode_heuristic(_inputmappingFileName, _inputreencodedFileName, 1, fNewVar, recordPi);
         _end_time = Abc_Clock();
         _time_ireencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
         printf("reencode computation time: %9.2f\n", _time_ireencode);
@@ -125,54 +130,44 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     }
     else if(fSolving == HEURISTIC_EACH)
     {
+        int nPo = getWorkingPoNum();
+        bool * litPo = getWorkingLitPo();
         _step_time = Abc_Clock();
-        for(int i=0; i<workingPo; i++)
+        for(int i=0; i<nPo; i++)
         {
-            for(int k=0; k<workingPo; k++)
-                _litPo[k] = 0;
-            _litPo[i] = 1;
+            for(int k=0; k<nPo; k++)
+                litPo[k] = 0;
+            litPo[i] = 1;
 
-            result = icompact_cube_heuristic(_workingFileName, 1, fRatio);
+            result = icompact_heuristic(1, fRatio);
             assert(result > 0);
-            writeCompactpla(tmpFileName, _workingFileName, _nPi, _litPi, workingPo, _litPo, i);
-            sprintf( Command, "read %s; strash", tmpFileName);
-            if(Cmd_CommandExecute(pAbc,Command))
-            {
-                printf("Cannot read %s\n", tmpFileName);
-                return NULL;
-            }
-            if(Cmd_CommandExecute(pAbc,minimizeCommand))
-            {
-                printf("Minimize %s. Failed.\n", tmpFileName);
-                return NULL;
-            }
-            pNtk_tmp = Abc_FrameReadNtk(pAbc);
-            if(pNtk_core == NULL)
-                pNtk_core = Abc_NtkDup(pNtk_tmp);
+            writeCompactpla(_tmpFileName);
+            _pNtk_tmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
+            _pNtk_tmp = Abc_NtkToLogic(_pNtk_tmp);
+            _pNtk_tmp = Abc_NtkStrash(_pNtk_tmp, 0, 0, 0);
+            _pNtk_tmp = ntkMinimize(_pNtk_tmp, BASIC, 0);
+            if(_pNtk_core == NULL)
+                _pNtk_core = Abc_NtkDup(_pNtk_tmp);
             else
-                Abc_NtkAppend(pNtk_core, pNtk_tmp, 1);
+                Abc_NtkAppend(_pNtk_core, _pNtk_tmp, 1);
         }
         _end_time = Abc_Clock();
-        Abc_FrameSetCurrentNetwork(pAbc, pNtk_core);
-        if(Cmd_CommandExecute(pAbc,minimizeCommand))
-        {
-            printf("Minimize %s. Failed.\n", tmpFileName);
-            return NULL;
-        }
-        pNtk_core = Abc_FrameReadNtk(pAbc);
+        _pNtk_core = ntkMinimize(_pNtk_core, BASIC, 0);
         _time_core = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-        _gate_core = Abc_NtkNodeNum(pNtk_core);
+        _gate_core = Abc_NtkNodeNum(_pNtk_core);
         printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
     }
     
     if(fSolving != (REENCODE || HEURISTIC_EACH))
     {
+        int nPi = getWorkingPiNum();
+        bool * litPi = getWorkingLitPi();
         _time_icompact = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
         printf("==========================\n");
         printf("icompact computation time: %9.2f\n", _time_icompact);
-        printf("icompact result: %i / %i\n", result, _nPi);
-        for(int i=0; i<_nPi; i++)
-            if(_litPi[i])
+        printf("icompact result: %i / %i\n", result, nPi);
+        for(int i=0; i<nPi; i++)
+            if(litPi[i])
                 printf("%i ", i);
         printf("\n");
     }
@@ -181,183 +176,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
 }
 
 /////////////////////////////////////////////////////////
-// 
+// Not handled
 /////////////////////////////////////////////////////////
-
-int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo)
-{
-    FILE *fcareset = fopen(caresetFilename, "r");
-    FILE *fpatterns = fopen(patternsFileName, "w");
-    char buff[102400];
-    int minterm_total;
-    int enum_count;
-    int local_count;
-    char* literals = new char[nPi];
-    char* one_line = new char[nPi + nPo + 2];
-    one_line[nPi+nPo+1] = '\0';
-    one_line[nPi] = ' ';
-    for(int i=nPi+1; i<nPi+nPo+1; i++)
-        one_line[i] = '0';
-
-    fgets(buff, 102400, fcareset); // no header needed for simulation file
-    fgets(buff, 102400, fcareset);
-    while(fgets(buff, 102400, fcareset))
-    {
-        for(int i=0;i<nPi; i++)
-            literals[i] = 1;
-        
-        enum_count = 0;
-        for(int i=0; i<nPi; i++)
-        {
-            if(buff[i]!='1' && buff[i]!='0')
-            {
-                literals[i] = 0;
-                enum_count++;
-            }
-        }
-        
-        // printf("%s : %i\n", buff, enum_count); 
-        if(enum_count > 20)
-            return 1;
-        else if(enum_count != 0) 
-            minterm_total = (int)pow(2, enum_count);
-        else
-            minterm_total = 1;
-
-        if(enum_count == 0)
-        {
-            for(int i=0; i<nPi; i++)
-                one_line[i] = buff[i];
-            fprintf(fpatterns, "%s\n", one_line);
-        }
-        else
-        {
-            while(minterm_total > 0)
-            {
-                local_count = enum_count-1;
-                
-                minterm_total = minterm_total - 1;
-                for(int i=0; i<nPi; i++)
-                {
-                    
-                    if(literals[i])
-                        one_line[i] = buff[i];
-                    else
-                    {
-                        one_line[i] = ((minterm_total >> local_count)%2)? '1': '0';
-                        local_count = local_count-1;
-                    }     
-                    
-                }
-                fprintf(fpatterns, "%s\n", one_line);
-            }
-        }
-    }
-
-    fclose(fcareset);
-    fclose(fpatterns);
-    delete [] one_line;
-    return 0;
-}
-
-void writeCompactpla(char* outputplaFileName, char* patternFileName, int nPi, bool* litPi, int nPo, bool* litPo, int idx)
-{
-    FILE* fcompactpla = fopen(outputplaFileName, "w");
-    FILE* fpattern = fopen(patternFileName, "r");
-    char buff[102400];
-    int lenPi, lenPo;
-
-    int count = 0;
-    for(int i=0; i<nPi; i++)
-        if(litPi[i])
-            count++;
-    lenPi = count;
-    count = 0;
-    for(int i=0; i<nPo; i++)
-        if(litPo[i])
-            count++;
-    lenPo = count;
-    
-    char* one_line = new char[lenPi + lenPo + 2];
-    one_line[lenPi] = ' ';
-    one_line[lenPi + lenPo + 1] = '\0';
-
-    fgets(buff, 102400, fpattern);
-    fgets(buff, 102400, fpattern);
-    fgets(buff, 102400, fpattern);
-    fprintf(fcompactpla, ".i %i\n", lenPi);
-    fprintf(fcompactpla, ".o %i\n", lenPo);
-    if(lenPo == 1) // modify later
-        fprintf(fcompactpla, ".ob z%i\n", idx);
-    fprintf(fcompactpla, ".type fr\n");
-    while(fgets(buff, 102400, fpattern))
-    {
-        int local_count = 0;
-        for(int i=0; i<nPi; i++)
-            if(litPi[i])
-            {
-                one_line[local_count] = buff[i];
-                local_count++;
-            }
-        local_count = 0;
-        for(int i=0; i<nPo; i++)
-            if(litPo[i])
-            {
-                one_line[lenPi + 1 + local_count] = buff[nPi + 1 + i];
-                local_count++;
-            }    
-        fprintf(fcompactpla, "%s\n", one_line);
-    }
-
-    fclose(fcompactpla);
-    fclose(fpattern);
-    delete [] one_line;
-}
-
-int espresso_input_count(char* filename)
-{
-    char buff[102400];
-    char* t;
-
-    int nPi;
-    bool* lit;
-    int count;
-
-    FILE* f = fopen(filename, "r");
-    fgets(buff, 102400, f); // skip
-    t = strtok(buff, " \n"); // skip
-    t = strtok(NULL, " \n");
-    nPi = atoi(t);
-    fgets(buff, 102400, f); // skip
-    fgets(buff, 102400, f); // skip
-    
-    lit = new bool[nPi];
-    for(int i=0; i<nPi; i++)
-        lit[i] = 0;
-    while(fgets(buff, 102400, f))
-    {
-        if(buff[1] == 'e')
-            break;
-        for(int i=0; i<nPi; i++)
-        {
-            if(buff[i] == '1' || buff[i] == '0')
-                lit[i] = 1;
-        }
-    }
-
-    count = 0;
-    for(int i=0; i<nPi; i++)
-    {
-        if(lit[i] == 1)
-            count++;
-    }
-
-    // clean up
-    delete [] lit;
-    fclose(f);
-
-    return count;
-}
 
 int aux_genReducedPla(int nPi, int poIdx, char* originalFilename, char* outputFilename)
 {
@@ -561,25 +381,6 @@ void get_support_pat(char* plaFile, int nPi, int nPo, int** supportInfo)
 // Aux functions
 /////////////////////////////////////////////////////////
 
-int IcompactMgr::check_pla_pipo(char *pFileName)
-{
-    char buff[102400];
-    char* t;
-    FILE* fPla = fopen(pFileName, "r");
-
-    fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    if(atoi(t) != _nPi) { fclose(fPla); return 1; }
-    fgets(buff, 102400, fPla);
-    t = strtok(buff, " \n");
-    t = strtok(NULL, " \n");
-    if(atoi(t) != _nPo) { fclose(fPla); return 1; }
-    
-    fclose(fPla);
-    return 0;
-}
-
 /////////////////////////////////////////////////////////
 // Ntk Functions
 /////////////////////////////////////////////////////////
@@ -588,9 +389,9 @@ void IcompactMgr::getNtk_func()
     _pNtk_func = Io_Read(_funcFileName, Io_ReadFileType(_funcFileName), 1, 0);
     _pNtk_func = Abc_NtkToLogic(_pNtk_func);
     _pNtk_func = Abc_NtkStrash(_pNtk_func, 0, 0, 0);
-    // set _oriPi, _oriPo
-    _oriPi = Abc_NtkPiNum(_pNtk_func);
-    _oriPo = Abc_NtkPoNum(_pNtk_func);
+    // set _nPi, _nPo
+    _nPi = Abc_NtkPiNum(_pNtk_func);
+    _nPo = Abc_NtkPoNum(_pNtk_func);
 }
 
 // Caution: may result in huge Ntk. Batching added later.
@@ -680,6 +481,64 @@ Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fColla
 //         return _pNtk_careset;
 //     }      
 // }
+
+int IcompactMgr::writeCompactpla(char* outputplaFileName)
+{
+    int nPi = getWorkingPiNum();
+    int nPo = getWorkingPoNum();
+    bool * litPi = getWorkingLitPi();
+    bool * litPo = getWorkingLitPo();
+    char * plaFile = _workingFileName;
+
+    FILE* fcompactpla = fopen(outputplaFileName, "w");
+    FILE* fpattern = fopen(plaFile, "r");
+    char buff[102400];
+    int lenPi, lenPo;
+
+    int count = 0;
+    for(int i=0; i<nPi; i++)
+        if(litPi[i])
+            count++;
+    lenPi = count;
+    count = 0;
+    for(int i=0; i<nPo; i++)
+        if(litPo[i])
+            count++;
+    lenPo = count;
+    
+    char* one_line = new char[lenPi + lenPo + 2];
+    one_line[lenPi] = ' ';
+    one_line[lenPi + lenPo + 1] = '\0';
+
+    fgets(buff, 102400, fpattern);
+    fgets(buff, 102400, fpattern);
+    fgets(buff, 102400, fpattern);
+    fprintf(fcompactpla, ".i %i\n", lenPi);
+    fprintf(fcompactpla, ".o %i\n", lenPo);
+    fprintf(fcompactpla, ".type fr\n");
+    while(fgets(buff, 102400, fpattern))
+    {
+        int local_count = 0;
+        for(int i=0; i<nPi; i++)
+            if(litPi[i])
+            {
+                one_line[local_count] = buff[i];
+                local_count++;
+            }
+        local_count = 0;
+        for(int i=0; i<nPo; i++)
+            if(litPo[i])
+            {
+                one_line[lenPi + 1 + local_count] = buff[nPi + 1 + i];
+                local_count++;
+            }    
+        fprintf(fcompactpla, "%s\n", one_line);
+    }
+
+    fclose(fcompactpla);
+    fclose(fpattern);
+    delete [] one_line;
+}
 
 /////////////////////////////////////////////////////////
 // Input compact methods
@@ -801,24 +660,30 @@ void sat_solver_print( sat_solver* pSat, int fDimacs )
     printf( "\n" );
 }
 
-int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double ratio)
+int IcompactMgr::icompact_heuristic(int iterNum, double fRatio)
 {
-    int result;
+    int result = 0;
+    int nPi = getWorkingPiNum();
+    int nPo = getWorkingPoNum();
+    bool * litPi = getWorkingLitPi();
+    bool * litPo = getWorkingLitPo();
+    char * plaFile = _workingFileName;
+    // ICompactHeuristicMgr parses pi/po by readFile
     ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr();
     mgr->readFile(plaFile);
-    mgr->lockEntry(ratio);
+    mgr->lockEntry(fRatio);
 
     size_t maskCount, minMaskCount;
     char *mask, *minMask;
     vector<size_t> varOrder;
 
     // solve
-    mask = new char[_nPi+1];
-    mask[_nPi] = '\0';
-    minMaskCount = _nPi;
-    minMask = new char[_nPi+1];
-    minMask[_nPi] = '\0';
-    for(size_t i=0; i<_nPi; i++)
+    mask = new char[nPi+1];
+    mask[nPi] = '\0';
+    minMaskCount = nPi;
+    minMask = new char[nPi+1];
+    minMask[nPi] = '\0';
+    for(size_t i=0; i<nPi; i++)
         varOrder.push_back(i);
 
     for(int iter=0; iter<iterNum; iter++)
@@ -831,42 +696,41 @@ int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double rati
             cout << varOrder[i] << " ";
         cout << endl;
 #endif
-        for(size_t i=0; i<_nPi; i++)
+        for(size_t i=0; i<nPi; i++)
             mask[i] = '1';
-        for(size_t i=0; i<_nPi; i++)
+        for(size_t i=0; i<nPi; i++)
         {
             size_t test = varOrder[i];
             if(mgr->getLocked(test))
                 continue;
             mask[test] = '0'; // drop var
             mgr->maskOne(test);
-            if(mgr->findConflict(_litPo))
+            if(mgr->findConflict(litPo))
             {
                 mask[test] = '1'; // preserve var
                 mgr->undoOne();
             }        
         }
-        maskCount = _nPi;
-        for(size_t i=0; i<_nPi; i++)
+        maskCount = nPi;
+        for(size_t i=0; i<nPi; i++)
             if(mask[i] == '0')
                 maskCount--; 
         if(maskCount <= minMaskCount)
         {
             minMaskCount = maskCount;
-            for(int i=0; i<_nPi; i++)
+            for(int i=0; i<nPi; i++)
                 minMask[i] = mask[i];
         }
     }
 
     // report
-    for(size_t i=0; i<_nPi; i++)
-        _litPi[i] = 0;
-    result = 0;
-    for(size_t i=0; i<_nPi; i++)
+    for(size_t i=0; i<nPi; i++)
+        litPi[i] = 0;
+    for(size_t i=0; i<nPi; i++)
     {
         if(minMask[i] == '1')
         {
-            _litPi[i] = 1;
+            litPi[i] = 1;
             result++;
         }
     }
@@ -877,13 +741,20 @@ int IcompactMgr::icompact_cube_heuristic(char* plaFile, int iterNum, double rati
     return result;
 }
 
-int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_careset)
+// precondition: _pNtk_func, _pNtk_careset
+int IcompactMgr::icompact_main()
 {
-    int result = _nPi;
-    int pLits[_nPi]; // satSolver assumption
+    int result = 0;
+    int nPi = getWorkingPiNum();
+    int nPo = getWorkingPoNum();
+    bool * litPi = getWorkingLitPi();
+    bool * litPo = getWorkingLitPo();
+    Abc_Ntk_t * pNtk_func = _pNtk_func;
+    Abc_Ntk_t * pNtk_careset = _pNtk_careset;
+    int pLits[nPi]; // satSolver assumption
     int nLitPo = 0;
-    for(int i=0; i<_nPo; i++)
-        if(_litPo[i]) { nLitPo++; }    
+    for(int i=0; i<nPo; i++)
+        if(litPo[i]) { nLitPo++; }    
 
     ///////////////////////////////////////////////////////////////////////
     // start solver
@@ -893,7 +764,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
     Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
 
-    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOriPi = Vec_IntAlloc(nPi);
     {
         Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
         Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
@@ -905,7 +776,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         cid = sat_solver_add_const(pSolver, var, 0);
         sat_solver_print(pSolver, 1);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
             int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
@@ -917,7 +788,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         Aig_ManStop(pAigOri);
     }
 
-    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pDupPi = Vec_IntAlloc(nPi);
     {
         Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
         Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
@@ -929,7 +800,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         cid = sat_solver_add_const(pSolver, var, 0);
         sat_solver_print(pSolver, 1);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
             int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
@@ -944,15 +815,15 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     Abc_Ntk_t *pNtkOut1 = Abc_NtkDup(pNtk_func);
     Abc_Ntk_t *pNtkOut2 = Abc_NtkDup(pNtkOut1);
 
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
+    Vec_Int_t *pOut1Pi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOut1Po = Vec_IntAlloc(nPo);
     {
         Aig_Man_t *pAigOut1 = Abc_NtkToDar(pNtkOut1, 0, 0);
         Cnf_Dat_t *pCnfOut1 = Cnf_Derive(pAigOut1, Abc_NtkCoNum(pNtkOut1));
         Cnf_DataLift(pCnfOut1, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfOut1);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjOut1 = Aig_ManCi(pCnfOut1->pMan, i);
             int var = pCnfOut1->pVarNums[Aig_ObjId(pAigObjOut1)];
@@ -960,7 +831,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
             Vec_IntPush(pOut1Pi, var);
         }
         // store var of po
-        for (int i=0; i<_nPo; i++)
+        for (int i=0; i<nPo; i++)
         {
             Aig_Obj_t *pAigObjOut1 = Aig_ManCo(pCnfOut1->pMan, i);
             int var = pCnfOut1->pVarNums[Aig_ObjId(pAigObjOut1)];
@@ -972,7 +843,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         Aig_ManStop(pAigOut1);
     }
 
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Pi, i);
         int varOri = Vec_IntEntry(pOriPi, i);
@@ -980,15 +851,15 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         assert(cid);
     }
 
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
+    Vec_Int_t *pOut2Pi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOut2Po = Vec_IntAlloc(nPo);
     {
         Aig_Man_t *pAigOut2 = Abc_NtkToDar(pNtkOut2, 0, 0);
         Cnf_Dat_t *pCnfOut2 = Cnf_Derive(pAigOut2, Abc_NtkCoNum(pNtkOut2));
         Cnf_DataLift(pCnfOut2, sat_solver_nvars(pSolver));
         sat_solver_addclause_from(pSolver, pCnfOut2);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjOut2 = Aig_ManCi(pCnfOut2->pMan, i);
             int var = pCnfOut2->pVarNums[Aig_ObjId(pAigObjOut2)];
@@ -996,7 +867,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
             Vec_IntPush(pOut2Pi, var);
         }
         // store var of po
-        for (int i=0; i<_nPo; i++)
+        for (int i=0; i<nPo; i++)
         {
             Aig_Obj_t *pAigObjOut2 = Aig_ManCo(pCnfOut2->pMan, i);
             int var = pCnfOut2->pVarNums[Aig_ObjId(pAigObjOut2)];
@@ -1008,7 +879,7 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         Aig_ManStop(pAigOut2);
     }
 
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
     {
         int varOut2 = Vec_IntEntry(pOut2Pi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1017,8 +888,8 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     }
     // printf("function clauses / variables: %i / %i\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver));
     // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
+    Vec_Int_t *pAlphaControls = Vec_IntAlloc(nPi);
+    for (int i=0; i<nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1029,8 +900,8 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     }
 
     // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
+    Vec_Int_t *pBetaControls = Vec_IntAlloc(nPi);
+    for (int i=0; i<nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1041,8 +912,8 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     }
 
     // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
-    for (int i = 0; i < _nPi; i++)
+    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(nPi);
+    for (int i = 0; i < nPi; i++)
     {
         int varAlpha = Vec_IntEntry(pAlphaControls, i);
         int varBeta = Vec_IntEntry(pBetaControls, i);
@@ -1052,18 +923,18 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
         assert(cid);
     }
 
-    lit Lits_AlphaBeta[_nPi];
-    for (int i=0; i<_nPi; i++)
+    lit Lits_AlphaBeta[nPi];
+    for (int i=0; i<nPi; i++)
     {
         int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
         Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
     }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
+    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
     assert(cid);
 
     // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
-    for(int i=0; i<_nPo; i++)
+    Vec_Int_t *pGammaControls = Vec_IntAlloc(nPo);
+    for(int i=0; i<nPo; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Po, i);
         int varOut2 = Vec_IntEntry(pOut2Po, i);
@@ -1076,9 +947,9 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     // V(Gamma)
     lit Lits_Gamma[nLitPo];
     int count = 0;
-    for(int i=0; i<_nPo; i++)
+    for(int i=0; i<nPo; i++)
     {
-        if(_litPo[i])
+        if(litPo[i])
         {
             int var = Vec_IntEntry(pGammaControls, i);
             Lits_Gamma[count] = toLitCond(var, 0);
@@ -1091,18 +962,18 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     ///////////////////////////////////////////////////////////////////////
     // printf("Total clauses / variables: %i / %i\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver));
     // set assumption order
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
         pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
+    result = sat_solver_minimize_assumptions2(pSolver, pLits, nPi, 0);
 
     // update litPi
-    for(int i=0; i<_nPi; i++)
-        _litPi[i] = 0;
+    for(int i=0; i<nPi; i++)
+        litPi[i] = 0;
     for(int i=0; i<result; i++)
     {
         int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var < _nPi);
-        _litPi[var] = 1;
+        assert(var >= 0 && var < nPi);
+        litPi[var] = 1;
     }
 
     // clean up
@@ -1119,16 +990,23 @@ int IcompactMgr::icompact_cube_main( Abc_Ntk_t * pNtk_func, Abc_Ntk_t * pNtk_car
     return result;
 }
 
-int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, char* forqesFileName, char* forqesCareFileName, char* MUSFileName)
+// precondition: _workingFileName, pNtk_careset
+int IcompactMgr::icompact_direct_encode_with_c()
 {
-    int result = _nPi;
-    int pLits[_nPi];
+    int result = 0;
+    int nPi = getWorkingPiNum();
+    int nPo = getWorkingPoNum();
+    bool * litPi = getWorkingLitPi();
+    bool * litPo = getWorkingLitPo();
+    char* plaFile = _workingFileName;
+    Abc_Ntk_t* pNtk_careset = _pNtk_careset;
+    int pLits[nPi];
     char buff[102400];
     char* t;
     FILE *ff, *fm, *fPla; // file Forqes, file Muser2, file working pla  
     int nLitPo = 0;
-    for(int i=0; i<_nPo; i++)
-        if(_litPo[i]) { nLitPo++; }
+    for(int i=0; i<nPo; i++)
+        if(litPo[i]) { nLitPo++; }
     
     fPla = fopen(plaFile, "r");
     fgets(buff, 102400, fPla);
@@ -1142,7 +1020,7 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
     Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
 
-    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOriPi = Vec_IntAlloc(nPi);
     {
         Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
         Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
@@ -1153,7 +1031,7 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         assert(var > 0);
         cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
             int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
@@ -1165,7 +1043,7 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         Aig_ManStop(pAigOri);
     }
 
-    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pDupPi = Vec_IntAlloc(nPi);
     {
         Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
         Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
@@ -1176,7 +1054,7 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         assert(var > 0);
         cid = sat_solver_add_const(pSolver, var, 0);
         // store var of pi
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
         {
             Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
             int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
@@ -1187,10 +1065,10 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         Cnf_DataFree(pCnfDup);
         Aig_ManStop(pAigDup);
     }
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
+    Vec_Int_t *pOut1Pi = Vec_IntAlloc(nPi);
+    Vec_Int_t *pOut2Pi = Vec_IntAlloc(nPi);
     {
-        for(int i=0; i<_nPi; i++)
+        for(int i=0; i<nPi; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Pi, newVar1);
@@ -1198,10 +1076,10 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
             Vec_IntPush(pOut2Pi, newVar2);
         }
     }
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
+    Vec_Int_t *pOut1Po = Vec_IntAlloc(nPo);
+    Vec_Int_t *pOut2Po = Vec_IntAlloc(nPo);
     {
-        for(int i=0; i<_nPo; i++)
+        for(int i=0; i<nPo; i++)
         {
             int newVar1 = sat_solver_addvar(pSolver);
             Vec_IntPush(pOut1Po, newVar1);
@@ -1217,22 +1095,22 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     // -c o2
     while(fgets(buff, 102400, fPla))
     {
-        lit Lits_Pattern1[_nPi+1];
+        lit Lits_Pattern1[nPi+1];
         int c1 = sat_solver_addvar(pSolver);
-        for(int i=0; i<_nPi; i++)
+        for(int i=0; i<nPi; i++)
         {
             int phase = (buff[i] == '1')? 1: 0;
             int varIn = Vec_IntGetEntry(pOut1Pi, i);
             Lits_Pattern1[i] = toLitCond(varIn, phase);
         }
-        Lits_Pattern1[_nPi] = toLitCond(c1, 0);
-        cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + _nPi + 1);
+        Lits_Pattern1[nPi] = toLitCond(c1, 0);
+        cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + nPi + 1);
         assert(cid);
 
-        for(int i=0; i<_nPo; i++)
+        for(int i=0; i<nPo; i++)
         {
             lit Lits_Out1[2];
-            int phase = (buff[_nPi + 1 + i] == '1')? 0: 1;
+            int phase = (buff[nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut1Po, i);
             Lits_Out1[0] = toLitCond(c1, 1);
             Lits_Out1[1] = toLitCond(varOut, phase);
@@ -1240,22 +1118,22 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
             assert(cid);
         }
 
-        lit Lits_Pattern2[_nPi+1];
+        lit Lits_Pattern2[nPi+1];
         int c2 = sat_solver_addvar(pSolver);
-        for(int i=0; i<_nPi; i++)
+        for(int i=0; i<nPi; i++)
         {
             int phase = (buff[i] == '1')? 1: 0;
             int varIn = Vec_IntGetEntry(pOut2Pi, i);
             Lits_Pattern2[i] = toLitCond(varIn, phase);
         }
-        Lits_Pattern2[_nPi] = toLitCond(c2, 0);
-        cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + _nPi + 1);
+        Lits_Pattern2[nPi] = toLitCond(c2, 0);
+        cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + nPi + 1);
         assert(cid);
 
-        for(int i=0; i<_nPo; i++)
+        for(int i=0; i<nPo; i++)
         {
             lit Lits_Out2[2];
-            int phase = (buff[_nPi + 1 + i] == '1')? 0: 1;
+            int phase = (buff[nPi + 1 + i] == '1')? 0: 1;
             int varOut = Vec_IntGetEntry(pOut2Po, i);
             Lits_Out2[0] = toLitCond(c2, 1);
             Lits_Out2[1] = toLitCond(varOut, phase);
@@ -1265,14 +1143,14 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     }
     fclose(fPla);
 
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Pi, i);
         int varOri = Vec_IntEntry(pOriPi, i);
         cid = sat_solver_add_buffer(pSolver, varOut1, varOri, 0);
         assert(cid);
     }
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
     {
         int varOut2 = Vec_IntEntry(pOut2Pi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1280,8 +1158,8 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         assert(cid);
     }
     // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
+    Vec_Int_t *pAlphaControls = Vec_IntAlloc(nPi);
+    for (int i=0; i<nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1292,8 +1170,8 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     }
 
     // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
+    Vec_Int_t *pBetaControls = Vec_IntAlloc(nPi);
+    for (int i=0; i<nPi; i++)
     {
         int varOri = Vec_IntEntry(pOriPi, i);
         int varDup = Vec_IntEntry(pDupPi, i);
@@ -1304,8 +1182,8 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     }
 
     // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
+    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(nPi);
+    for (int i=0; i<nPi; i++)
     {
         int varAlpha = Vec_IntEntry(pAlphaControls, i);
         int varBeta = Vec_IntEntry(pBetaControls, i);
@@ -1315,18 +1193,18 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
         assert(cid);
     }
 
-    lit Lits_AlphaBeta[_nPi];
-    for (int i=0; i<_nPi; i++)
+    lit Lits_AlphaBeta[nPi];
+    for (int i=0; i<nPi; i++)
     {
         int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
         Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
     }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
+    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + nPi);
     assert(cid);
 
     // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
-    for(int i=0; i<_nPo; i++)
+    Vec_Int_t *pGammaControls = Vec_IntAlloc(nPo);
+    for(int i=0; i<nPo; i++)
     {
         int varOut1 = Vec_IntEntry(pOut1Po, i);
         int varOut2 = Vec_IntEntry(pOut2Po, i);
@@ -1339,9 +1217,9 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     // V(Gamma)
     lit Lits_Gamma[nLitPo];
     int count = 0;
-    for(int i=0; i<_nPo; i++)
+    for(int i=0; i<nPo; i++)
     {
-        if(_litPo[i])
+        if(litPo[i])
         {
             int var = Vec_IntEntry(pGammaControls, i);
             Lits_Gamma[count] = toLitCond(var, 0);
@@ -1353,23 +1231,23 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
 
     ///////////////////////////////////////////////////////////////////////
     // write files for external use - need further check
-    if(forqesFileName != NULL && forqesCareFileName != NULL && MUSFileName != NULL)
+    if(_forqesFileName != NULL && _forqesCareFileName != NULL && _MUSFileName != NULL)
     {
-        Sat_SolverWriteDimacs(pSolver, forqesFileName, 0, 0, 1);
+        Sat_SolverWriteDimacs(pSolver, _forqesFileName, 0, 0, 1);
 
-        ff = fopen(forqesCareFileName, "w"); 
-        fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), _nPi);   
-        for (int i = 0; i < _nPi; i++)
+        ff = fopen(_forqesCareFileName, "w"); 
+        fprintf(ff, "p cnf %i %i\n", sat_solver_nvars(pSolver), nPi);   
+        for (int i = 0; i < nPi; i++)
             fprintf(ff, "-%i 0\n", Vec_IntEntry(pAlphaControls, i));
         fclose(ff);
 
-        fm = fopen(MUSFileName, "w");
-        fprintf(fm, "p gcnf %i %i %i\n", sat_solver_nvars(pSolver), sat_solver_nclauses(pSolver)+_nPi, _nPi);
-        ff = fopen(forqesFileName, "r");
+        fm = fopen(_MUSFileName, "w");
+        fprintf(fm, "p gcnf %i %i %i\n", sat_solver_nvars(pSolver), sat_solver_nclauses(pSolver)+nPi, nPi);
+        ff = fopen(_forqesFileName, "r");
         fgets(buff, 102400, ff);
         while(fgets(buff, 102400, ff))
             fprintf(fm, "{0} %s", buff);
-        for (int i=0; i<_nPi; i++)
+        for (int i=0; i<nPi; i++)
             fprintf(fm, "{%i} -%i 0\n", i+1, Vec_IntEntry(pAlphaControls, i));
         fclose(fm);  
     }
@@ -1378,271 +1256,21 @@ int IcompactMgr::icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pN
     // printf("Total clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
     
     // set assumption order
-    for (int i=0; i<_nPi; i++)
+    for (int i=0; i<nPi; i++)
         pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);
     
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
+    result = sat_solver_minimize_assumptions2(pSolver, pLits, nPi, 0);
     
     // update litPi
-    for(int i=0; i<_nPi; i++)
+    for(int i=0; i<nPi; i++)
     {
-        _litPi[i] = 0;
+        litPi[i] = 0;
     }
     for(int i=0; i<result; i++)
     {
         int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var < _nPi);
-        _litPi[var] = 1;
-    }
-    
-    // clean up
-    sat_solver_delete(pSolver);
-    Abc_NtkDelete(pNtkOri);
-    Abc_NtkDelete(pNtkDup);
-    Vec_IntFree(pOriPi);
-    Vec_IntFree(pDupPi);
-    Vec_IntFree(pAlphaControls);
-    Vec_IntFree(pBetaControls);
-    Vec_IntFree(pAndAlphaBeta);
-    Vec_IntFree(pGammaControls);
-
-    return result;
-}
-
-int IcompactMgr::icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset)
-{
-    int result = _nPi;
-    int pLits[_nPi];
-    char buff[102400];
-    char* t;
-    FILE *fPla;  // file working pla  
-    int nLitPo = 0;
-    for(int i=0; i<_nPo; i++)
-        if(_litPo[i]) { nLitPo++; }
-    
-    fPla = fopen(plaFile, "r");
-    fgets(buff, 102400, fPla);
-    fgets(buff, 102400, fPla);
-    fgets(buff, 102400, fPla);
-    ///////////////////////////////////////////////////////////////////////
-    // start solver
-    sat_solver *pSolver = sat_solver_new();
-    int cid;
-
-    Abc_Ntk_t *pNtkOri = Abc_NtkDup(pNtk_careset);
-    Abc_Ntk_t *pNtkDup = Abc_NtkDup(pNtkOri);
-
-    Vec_Int_t *pOriPi = Vec_IntAlloc(_nPi);
-    {
-        Aig_Man_t *pAigOri = Abc_NtkToDar(pNtkOri, 0, 0);
-        Cnf_Dat_t *pCnfOri = Cnf_Derive(pAigOri, Abc_NtkCoNum(pNtkOri));
-        Cnf_DataLift(pCnfOri, sat_solver_nvars(pSolver));
-        sat_solver_addclause_from(pSolver, pCnfOri);
-        Aig_Obj_t * pAigObj = Aig_ManCo(pCnfOri->pMan, 0);
-        int var = pCnfOri->pVarNums[Aig_ObjId(pAigObj)];
-        assert(var > 0);
-        cid = sat_solver_add_const(pSolver, var, 0);
-        // store var of pi
-        for (int i=0; i<_nPi; i++)
-        {
-            Aig_Obj_t *pAigObjOri = Aig_ManCi(pCnfOri->pMan, i);
-            int var = pCnfOri->pVarNums[Aig_ObjId(pAigObjOri)];
-            // Abc_Print(1, "var of pi %d: %d\n", i, var);
-            Vec_IntPush(pOriPi, var);
-        }
-        // memory free
-        Cnf_DataFree(pCnfOri);
-        Aig_ManStop(pAigOri);
-    }
-
-    Vec_Int_t *pDupPi = Vec_IntAlloc(_nPi);
-    {
-        Aig_Man_t *pAigDup = Abc_NtkToDar(pNtkDup, 0, 0);
-        Cnf_Dat_t *pCnfDup = Cnf_Derive(pAigDup, Abc_NtkCoNum(pNtkDup));
-        Cnf_DataLift(pCnfDup, sat_solver_nvars(pSolver));
-        sat_solver_addclause_from(pSolver, pCnfDup);
-        Aig_Obj_t * pAigObj = Aig_ManCo(pCnfDup->pMan, 0);
-        int var = pCnfDup->pVarNums[Aig_ObjId(pAigObj)];
-        assert(var > 0);
-        cid = sat_solver_add_const(pSolver, var, 0);
-        // store var of pi
-        for (int i=0; i<_nPi; i++)
-        {
-            Aig_Obj_t *pAigObjDup = Aig_ManCi(pCnfDup->pMan, i);
-            int var = pCnfDup->pVarNums[Aig_ObjId(pAigObjDup)];
-            // Abc_Print(1, "var of pi %d: %d\n", i, var);
-            Vec_IntPush(pDupPi, var);
-        }
-        // memory free
-        Cnf_DataFree(pCnfDup);
-        Aig_ManStop(pAigDup);
-    }
-    // printf("Careset clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
-    Vec_Int_t *pOut1Pi = Vec_IntAlloc(_nPi);
-    Vec_Int_t *pOut2Pi = Vec_IntAlloc(_nPi);
-    {
-        for(int i=0; i<_nPi; i++)
-        {
-            int newVar1 = sat_solver_addvar(pSolver);
-            Vec_IntPush(pOut1Pi, newVar1);
-            int newVar2 = sat_solver_addvar(pSolver);
-            Vec_IntPush(pOut2Pi, newVar2);
-        }
-    }
-    Vec_Int_t *pOut1Po = Vec_IntAlloc(_nPo);
-    Vec_Int_t *pOut2Po = Vec_IntAlloc(_nPo);
-    {
-        for(int i=0; i<_nPo; i++)
-        {
-            int newVar1 = sat_solver_addvar(pSolver);
-            Vec_IntPush(pOut1Po, newVar1);
-            int newVar2 = sat_solver_addvar(pSolver);
-            Vec_IntPush(pOut2Po, newVar2);
-        }
-    }
-    
-    // i0 i1 i2 o0 o1 o2
-    // -i0 -i1 -i2 o0
-    // -i0 -i1 -i2 o1
-    // -i0 -i1 -i2 o2
-    while(fgets(buff, 102400, fPla))
-    {
-        for(int i=0; i<_nPo; i++)
-        {
-            lit Lits_Pattern1[_nPi+1];
-            for(int j=0; j<_nPi; j++)
-            {
-                int phaseIn = (buff[j] == '1')? 1: 0;
-                int varIn = Vec_IntGetEntry(pOut1Pi, j);
-                Lits_Pattern1[j] = toLitCond(varIn, phaseIn);
-            }
-            int phaseOut = (buff[_nPi + 1 + i] == '1')? 0: 1;
-            int varOut = Vec_IntGetEntry(pOut1Po, i);
-            Lits_Pattern1[_nPi] = toLitCond(varOut, phaseOut);
-            cid = sat_solver_addclause(pSolver, Lits_Pattern1, Lits_Pattern1 + _nPi + 1);
-            assert(cid);
-        }
-
-        for(int i=0; i<_nPo; i++)
-        {
-            lit Lits_Pattern2[_nPi+1];
-            for(int j=0; j<_nPi; j++)
-            {
-                int phaseIn = (buff[j] == '1')? 1: 0;
-                int varIn = Vec_IntGetEntry(pOut2Pi, j);
-                Lits_Pattern2[j] = toLitCond(varIn, phaseIn);
-            }
-            int phaseOut = (buff[_nPi + 1 + i] == '1')? 0: 1;
-            int varOut = Vec_IntGetEntry(pOut2Po, i);
-            Lits_Pattern2[_nPi] = toLitCond(varOut, phaseOut);
-            cid = sat_solver_addclause(pSolver, Lits_Pattern2, Lits_Pattern2 + _nPi + 1);
-            assert(cid);
-        }      
-    }
-    fclose(fPla);
-
-    for (int i=0; i<_nPi; i++)
-    {
-        int varOut1 = Vec_IntEntry(pOut1Pi, i);
-        int varOri = Vec_IntEntry(pOriPi, i);
-        cid = sat_solver_add_buffer(pSolver, varOut1, varOri, 0);
-        assert(cid);
-    }
-    for (int i=0; i<_nPi; i++)
-    {
-        int varOut2 = Vec_IntEntry(pOut2Pi, i);
-        int varDup = Vec_IntEntry(pDupPi, i);
-        cid = sat_solver_add_buffer(pSolver, varOut2, varDup, 0);
-        assert(cid);
-    }
-    // printf("Function clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
-    // Alpha : (x=x' + alpha)
-    Vec_Int_t *pAlphaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
-    {
-        int varOri = Vec_IntEntry(pOriPi, i);
-        int varDup = Vec_IntEntry(pDupPi, i);
-        int varAlphaControl = sat_solver_addvar(pSolver);
-        Vec_IntPush(pAlphaControls, varAlphaControl);
-        cid = sat_solver_conditional_unequal(pSolver, varOri, varDup, varAlphaControl);
-        assert(cid);
-    }
-
-    // Beta : (x!=x' <> beta)
-    Vec_Int_t *pBetaControls = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
-    {
-        int varOri = Vec_IntEntry(pOriPi, i);
-        int varDup = Vec_IntEntry(pDupPi, i);
-        int varBetaControl = sat_solver_addvar(pSolver);
-        Vec_IntPush(pBetaControls, varBetaControl);
-        cid = sat_solver_iff_unequal(pSolver, varOri, varDup, varBetaControl);
-        assert(cid);
-    }
-
-    // V(Alpha ^ Beta)
-    Vec_Int_t *pAndAlphaBeta = Vec_IntAlloc(_nPi);
-    for (int i=0; i<_nPi; i++)
-    {
-        int varAlpha = Vec_IntEntry(pAlphaControls, i);
-        int varBeta = Vec_IntEntry(pBetaControls, i);
-        int varAnd = sat_solver_addvar(pSolver);
-        Vec_IntPush(pAndAlphaBeta, varAnd);
-        cid = sat_solver_add_and(pSolver, varAnd, varAlpha, varBeta, 0, 0, 0);
-        assert(cid);
-    }
-
-    lit Lits_AlphaBeta[_nPi];
-    for (int i=0; i<_nPi; i++)
-    {
-        int varAnd = Vec_IntEntry(pAndAlphaBeta, i);
-        Lits_AlphaBeta[i] = toLitCond(varAnd, 0);
-    }   
-    cid = sat_solver_addclause(pSolver, Lits_AlphaBeta, Lits_AlphaBeta + _nPi);
-    assert(cid);
-
-    // Gamma : (o != o' <> gamma)
-    Vec_Int_t *pGammaControls = Vec_IntAlloc(_nPo);
-    for(int i=0; i<_nPo; i++)
-    {
-        int varOut1 = Vec_IntEntry(pOut1Po, i);
-        int varOut2 = Vec_IntEntry(pOut2Po, i);
-        int varGammaControl = sat_solver_addvar(pSolver);
-        Vec_IntPush(pGammaControls, varGammaControl);
-        cid = sat_solver_iff_unequal(pSolver, varOut1, varOut2, varGammaControl);
-        assert(cid);
-    }
-
-    // V(Gamma)
-    lit Lits_Gamma[nLitPo];
-    int count = 0;
-    for(int i=0; i<_nPo; i++)
-    {
-        if(_litPo[i])
-        {
-            int var = Vec_IntEntry(pGammaControls, i);
-            Lits_Gamma[count] = toLitCond(var, 0);
-            count++;
-        }
-    }
-    cid = sat_solver_addclause(pSolver, Lits_Gamma, Lits_Gamma + nLitPo);
-    assert(cid);
-
-    ///////////////////////////////////////////////////////////////////////
-    // printf("Total clauses / variables / lits: %i / %i / %ld\n", sat_solver_nclauses(pSolver), sat_solver_nvars(pSolver), pSolver->stats.clauses_literals);
-    // set assumption order
-    for (int i=0; i<_nPi; i++)
-        pLits[i] = Abc_Var2Lit(Vec_IntEntry(pAlphaControls, i),1);  
-    result = sat_solver_minimize_assumptions2(pSolver, pLits, _nPi, 0);
-
-    // update litPi
-    for(int i=0; i<_nPi; i++)
-        _litPi[i] = 0;
-    for(int i=0; i<result; i++)
-    {
-        int var = Abc_Lit2Var(pLits[i]) - Vec_IntEntry(pAlphaControls, 0);
-        assert(var >= 0 && var < _nPi);
-        _litPi[var] = 1;
+        assert(var >= 0 && var < nPi);
+        litPi[var] = 1;
     }
     
     // clean up
@@ -1663,17 +1291,18 @@ int IcompactMgr::icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t*
 // Reencode Methods
 /////////////////////////////////////////////////////////
 
-// less arguements later.
-int IcompactMgr::reencode_naive(char* plaFile, char* reencodeplaFile, char* outputmapping)
+// add fMode later.
+int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
 {
+    char* plaFile = _workingFileName;
     int nRPo;
     FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
     FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
-    FILE* fMapping  = fopen(outputmapping, "w");   // .i .o .type fr
+    FILE* fMapping  = fopen(mapping, "w");         // .i .o .type fr
     char buff[102400];
     char* t;
     int count = 0;
-    std::map<std::string, int> mapping;
+    std::map<std::string, int> mapVar;
 
     fgets(buff, 102400, ff);
     fgets(buff, 102400, ff);
@@ -1683,9 +1312,9 @@ int IcompactMgr::reencode_naive(char* plaFile, char* reencodeplaFile, char* outp
         t = strtok(buff, " \n");
         t = strtok(NULL, " \n");
         std::string s(t);
-        if(mapping.count(s) == 0)
+        if(mapVar.count(s) == 0)
         {
-            mapping[s] = count;
+            mapVar[s] = count;
             count++;
         }        
     }
@@ -1711,7 +1340,7 @@ int IcompactMgr::reencode_naive(char* plaFile, char* reencodeplaFile, char* outp
         fprintf(fReencode, "%s ", t);
         t = strtok(NULL, " \n");
         std::string s(t);
-        encoding = mapping[s];
+        encoding = mapVar[s];
         for(int i=0; i<nRPo; i++)
         {
             int rbit = encoding%2;
@@ -1729,19 +1358,21 @@ int IcompactMgr::reencode_naive(char* plaFile, char* reencodeplaFile, char* outp
     return nRPo;
 }
 
-int IcompactMgr::reencode_heuristic(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record)
+// fMode = 1 input reencode, = 0 output reencode
+int IcompactMgr::reencode_heuristic(char* reencodeplaFile, char* mapping, bool fMode, int newVar, int* record)
 {
+    char* plaFile = _workingFileName;
     int nRPo, lineNum;
-    FILE* ff      = fopen(plaFile, "r");         // .i .o .type fr
+    FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
     FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
-    FILE* fMapping  = fopen(outputmapping, "w");   // .i .o .type fr
+    FILE* fMapping  = fopen(mapping, "w");         // .i .o .type fr
     char buff[102400];
     char *t, *OCResult;
 
     ReencodeHeuristicMgr* mgr = new ReencodeHeuristicMgr();
-    mgr->readFile(plaFile, type);
+    mgr->readFile(plaFile, fMode);
     nRPo = mgr->getEncoding(newVar);
-    mgr->getMapping(type, record);    
+    mgr->getMapping(fMode, record);  
     
     fgets(buff, 102400, ff);
     fprintf(fReencode, "%s", buff);

@@ -140,6 +140,82 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     return 0;
 }
 
+int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo)
+{
+    FILE *fcareset = fopen(caresetFilename, "r");
+    FILE *fpatterns = fopen(patternsFileName, "w");
+    char buff[102400];
+    int minterm_total;
+    int enum_count;
+    int local_count;
+    char* literals = new char[nPi];
+    char* one_line = new char[nPi + nPo + 2];
+    one_line[nPi+nPo+1] = '\0';
+    one_line[nPi] = ' ';
+    for(int i=nPi+1; i<nPi+nPo+1; i++)
+        one_line[i] = '0';
+
+    fgets(buff, 102400, fcareset); // no header needed for simulation file
+    fgets(buff, 102400, fcareset);
+    while(fgets(buff, 102400, fcareset))
+    {
+        for(int i=0;i<nPi; i++)
+            literals[i] = 1;
+        
+        enum_count = 0;
+        for(int i=0; i<nPi; i++)
+        {
+            if(buff[i]!='1' && buff[i]!='0')
+            {
+                literals[i] = 0;
+                enum_count++;
+            }
+        }
+        
+        // printf("%s : %i\n", buff, enum_count); 
+        if(enum_count > 20)
+            return 1;
+        else if(enum_count != 0) 
+            minterm_total = (int)pow(2, enum_count);
+        else
+            minterm_total = 1;
+
+        if(enum_count == 0)
+        {
+            for(int i=0; i<nPi; i++)
+                one_line[i] = buff[i];
+            fprintf(fpatterns, "%s\n", one_line);
+        }
+        else
+        {
+            while(minterm_total > 0)
+            {
+                local_count = enum_count-1;
+                
+                minterm_total = minterm_total - 1;
+                for(int i=0; i<nPi; i++)
+                {
+                    
+                    if(literals[i])
+                        one_line[i] = buff[i];
+                    else
+                    {
+                        one_line[i] = ((minterm_total >> local_count)%2)? '1': '0';
+                        local_count = local_count-1;
+                    }     
+                    
+                }
+                fprintf(fpatterns, "%s\n", one_line);
+            }
+        }
+    }
+
+    fclose(fcareset);
+    fclose(fpatterns);
+    delete [] one_line;
+    return 0;
+}
+
 /////////////////////////////////////////////////////////
 // Random String Generation
 /////////////////////////////////////////////////////////

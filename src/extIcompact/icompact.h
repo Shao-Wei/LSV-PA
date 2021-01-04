@@ -45,10 +45,11 @@ public:
 
 private:
     bool _fIcompact, _fOcompact;
-    int _oriPi, _oriPo;
-    // TODO: Clarify usage of _nPi, _nPo;
-    int _nPi, _nPo; // No not touch _nPi. compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
-    bool *_litPi, *_litPo;
+    
+    // int _nPi, _nPo;
+    // bool *_litPi, *_litPo;
+    int _nRPi, _nRPo; // compacted Pi/ Po. Output Compaction & Input Reencoding results are stored here
+    bool *_litRPi, *_litRPo;
     abctime _step_time, _end_time;
 
     Abc_Frame_t * _pAbc;
@@ -87,7 +88,10 @@ private:
     double _time_imap, _time_core, _time_omap, _time_batch; // minimization time for each sub-circuit
 
     // aux functions
-    int check_pla_pipo(char *pFileName);
+    int getWorkingPiNum() { return (_fIcompact)? _nRPi: _nPi; }
+    int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
+    bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
+    bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
 
     // ntk functions
     void getNtk_func(); // used in constructor
@@ -95,22 +99,19 @@ private:
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
+    int writeCompactpla(char* outputplaFileName);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
-    int icompact_cube_heuristic(char* plaFile, int iterNum, double ratio);
-    int icompact_cube_main(Abc_Ntk_t * pNtk_func, Abc_Ntk_t* pNtk_careset);
-    int icompact_cube_direct_encode_with_c(char* plaFile, Abc_Ntk_t* pNtk_careset, char* forqesFileName, char* forqesCareFileName, char* MUSFileName);
-    int icompact_cube_direct_encode_without_c(char* plaFile, Abc_Ntk_t* pNtk_careset);
-    
+    int icompact_heuristic(int iterNum, double fRatio);
+    int icompact_main();
+    int icompact_direct_encode_with_c();
+
     // reencode methods
-    int reencode_naive(char* plaFile, char* reencodeplaFile, char* outputmapping);
-    int reencode_heuristic(char* plaFile, char* reencodeplaFile, char* outputmapping, bool type, int newVar, int* record);
+    int reencode_naive(char* reencodeplaFile, char* mapping);
+    int reencode_heuristic(char* reencodeplaFile, char* mapping, bool type, int newVar, int* record);
 };
 
-extern int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
-extern int careset2patterns_r(char* patternsFileName, char* caresetFilename, int nPi);
-extern void writeCompactpla(char* outputplaFileName, char* patternFileName, int nPi, bool* litPi, int nPo, bool* litPo, int idx);
-extern int espresso_input_count(char* filename);
+
 extern Abc_Ntk_t* get_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time);
 extern Abc_Ntk_t* get_part_ntk(Abc_Frame_t_ * pAbc, char* plaFile, char* log, int& gate, double& time, int nPi, int nPo, int *litPo);
 
@@ -124,9 +125,14 @@ extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int 
 
 // icompactGencareset.cpp
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
-extern void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
-extern void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
-extern void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
+int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
+void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
+void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
+void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
+
+// icompactUtil.cpp
+extern int espresso_input_count(char* filename);
+
 
 ABC_NAMESPACE_HEADER_END
 #endif
