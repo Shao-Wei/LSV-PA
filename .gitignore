@@ -17,6 +17,11 @@ src/aig/au/
 src/aig/ssm/
 src/aig/ddb/
 
+samples/
+careset/
+check.pattern
+.vscode/
+
 *~
 *.orig
 

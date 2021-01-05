@@ -209,7 +209,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     /////////////////////////////////////////////////////////
     // Print Evaluation
     /////////////////////////////////////////////////////////
-    printf("Print output files & evaluation\n");
+    printf("[Info]Print output files & evaluation\n");
 
     ////////////////////////////////////////////////////////
     return result;

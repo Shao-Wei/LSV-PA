@@ -10,26 +10,24 @@ using namespace std;
 class Pattern
 {
 public:
-    Pattern(int ni, char* i, int no, char* o) { nPi = ni; nPo = no; patIn = i; patOut = o; preserve_idx = 0; preserve_bit = '0'; }
-    ~Pattern() {}
+    Pattern(int ni, char* i, int no, char* o) { _nPi = ni; _nPo = no; _patIn = i; _patOut = o; _preserve_idx = 0; _preserve_bit = '0'; }
+    ~Pattern() { delete [] _patIn; delete [] _patOut; }
 
-    int getnPi() const { return nPi; }
-    int getnPo() { return nPo; }
-    char* getpatIn() { return patIn; }
-    char* getpatOut() { return patOut; }
-    char getpatInIdx(int idx) const { return patIn[idx]; }
-    char getpatOutIdx(int idx) { return patOut[idx]; }
+    int   _nPi;
+    int   _nPo;
+    char* _patIn;
+    char* _patOut;
 
-    void maskOne(int idx, char bit) { preserve_idx = idx; preserve_bit = patIn[idx]; patIn[idx] = '0'; }
-    void undoOne() { patIn[preserve_idx] = preserve_bit; }
-    
+    // only class ICompactHeuristicMgr uses mask & undo
+    friend class ICompactHeuristicMgr;
 private:
-    int nPi;
-    int nPo;
-    char* patIn;
-    char* patOut;
-    int   preserve_idx;
-    char  preserve_bit;
+    int   _preserve_idx;
+    char  _preserve_bit;
+
+    // modify pattern
+    void maskOne(int idx) { _preserve_idx = idx; _preserve_bit = _patIn[idx]; _patIn[idx] = '0'; }
+    void undoOne() { _patIn[_preserve_idx] = _preserve_bit; }
+    
 };
 
 static bool PatternLessThan(Pattern* a, Pattern* b);
@@ -37,25 +35,35 @@ static bool PatternLessThan(Pattern* a, Pattern* b);
 class ICompactHeuristicMgr
 {
 public:
-    ICompactHeuristicMgr() {}
-    ~ICompactHeuristicMgr() {}
+    ICompactHeuristicMgr(char *fileName);
+    ~ICompactHeuristicMgr();
 
-    void readFile(char *fileName);
-    void pushbackvecPat(int ni, char* patIn, int no, char* patOut) { Pattern* p = new Pattern(ni, patIn, no, patOut); vecPat.push_back(p); }
-    int getnPi() { return nPi; }
-    int getnPo() { return nPo; }
-    bool getLocked(int idx) { return locked[idx]; }
-
+    // if certain pi is consistent w/ certain po, it is locked 
     void lockEntry(double ratio);
+
+    // compact - scheme drop
+    bool * compact_drop(int iterNum);
+
+    int getnPi() { return _nPi; }
+    int getnPo() { return _nPo; }
+    
+    bool findConflict(bool* litPo);
+private:
+    int _nPi;
+    int _nPo;
+    vector<Pattern*> _vecPat;
+
+    bool *_locked; // record locked pi
+    bool *_litPo; // record cared po 
+    vector<size_t> _varOrder;
+    bool *_minMask;
+
+    // aux
+    void pushbackvecPat(int ni, char* patIn, int no, char* patOut) { Pattern* p = new Pattern(ni, patIn, no, patOut); _vecPat.push_back(p); }
+    void varOrder_randomSuffle();
+    bool isLocked(int idx) { return _locked[idx]; }
     void maskOne(int test);
     void undoOne();
-    bool findConflict(bool* litPo);
-
-private:
-    int nPi;
-    int nPo;
-    vector<bool> locked;
-    vector<Pattern*> vecPat;    
 };
 
 #endif

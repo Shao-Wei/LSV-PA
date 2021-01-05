@@ -77,12 +77,9 @@ IcompactMgr::~IcompactMgr()
 int IcompactMgr::ocompact(int fOutput, int fNewVar)
 {
     printf("[Info] Start output compaction\n");
-    if(mgrStatus()) 
-        return 0;
-    if(_fOcompact) // do nothing
-        return 0;
-    if(fOutput == 0) // do nothing
-        return 0;
+    if(mgrStatus()) { return -1; }
+    if(_fOcompact) { return 0; }
+    if(fOutput == 0) { return _nPo; }
 
     int * recordPo = new int[_nPo]; // used in reencode_heuristic, see later
     
@@ -118,10 +115,8 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
 int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch)
 {
     printf("[Info] Start input compaction\n");
-    if(mgrStatus()) 
-        return 0;
-    if(_fIcompact)
-        return 0;
+    if(mgrStatus()) { return -1; }
+    if(_fIcompact) { return 0; }
 
     int result = 0;
     assert(!check_pla_pipo(_workingFileName, getWorkingPiNum(), getWorkingPoNum()));
@@ -133,6 +128,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_heuristic(1, fRatio);
+        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
         writeCompactpla(_reducedplaFileName);
     }
@@ -143,6 +139,19 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_heuristic(8, fRatio);
+        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
+        _end_time = Abc_Clock();
+        writeCompactpla(_reducedplaFileName);
+    }
+    else if(fSolving == HEURISTIC_SUPPORT)
+    {
+        printf("  heristic - support given - 8 iteration\n");
+        resetWorkingLitPi();
+        resetWorkingLitPo();
+        supportInfo_Func(); // get real support. used in icompact_heuristic_support_given
+        _step_time = Abc_Clock();
+        result = icompact_heuristic_support_given(8, fRatio);
+        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
         writeCompactpla(_reducedplaFileName);
     }
@@ -155,6 +164,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_main();
+        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
         writeCompactpla(_reducedplaFileName);
     }
@@ -166,6 +176,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         resetWorkingLitPo();
         _step_time = Abc_Clock();
         result = icompact_direct_encode_with_c();
+        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
         writeCompactpla(_reducedplaFileName);
     }
@@ -196,6 +207,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
             litPo[i] = 1;
             resetWorkingLitPi();
             result = icompact_heuristic(1, fRatio);
+            if(result == -1) { _fMgr = ICOMPACT_FAIL; }
             assert(result > 0);
             writeCompactpla(_tmpFileName);
             _pNtk_tmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
@@ -214,7 +226,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
     }
     
-    if(fSolving != REENCODE && fSolving != HEURISTIC_EACH)
+    if(result != -1 && fSolving != REENCODE && fSolving != HEURISTIC_EACH)
     {
         int nPi = getWorkingPiNum();
         bool * litPi = getWorkingLitPi();
@@ -222,12 +234,12 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         printf("icompact computation time: %9.2f\n", _time_icompact);
         printf("icompact result: %i / %i\n", result, nPi);
         for(int i=0; i<nPi; i++)
-            if(litPi[i])
-                printf("%i ", i);
+            if(litPi[i]) { printf("%i ", i); }
         printf("\n");
     }
 
     // neccessary
+    if(mgrStatus()) { return -1; } // avoid alloc -1
     _fIcompact = 1;
     _nRPi = result;
     _litRPi = new bool[_nRPi];
@@ -308,10 +320,14 @@ bool IcompactMgr::mgrStatus()
 {
     if(_fMgr == BADSAMPLES)
         printf("Mgr lockdown. Error: Bad samples file \n");
-    
+    else if(_fMgr == BADEVAL)
+        printf("Mgr lockdown. Error: Bad evaluation file \n");
+    else if(_fMgr == ICOMPACT_FAIL)
+        printf("Mgr lockdown. Error: unexpected failure in input compaction \n");
     return (_fMgr != NOERROR);
 }
 
+// all set to zero
 void IcompactMgr::resetWorkingLitPi()
 {
     if(_fIcompact)
@@ -326,6 +342,7 @@ void IcompactMgr::resetWorkingLitPi()
     }
 }
 
+// all set to one
 void IcompactMgr::resetWorkingLitPo()
 {
     if(_fOcompact)
@@ -340,6 +357,21 @@ void IcompactMgr::resetWorkingLitPo()
     }
 }
 
+bool IcompactMgr::validWorkingLitPi()
+{
+    int count = 0;
+    int nPi = (_fIcompact)? _nRPi: _nPi;
+    bool * litPi = (_fIcompact)? _litRPi: _litPi;
+
+    for(int i=0; i<nPi; i++)
+        if(litPi[i]) { count++; }
+
+    if(count == 0)
+        printf("Invalid litPi. Please specify pi set before use\n");
+
+    return (count > 0);
+}
+
 bool IcompactMgr::validWorkingLitPo()
 {
     int count = 0;
@@ -347,13 +379,14 @@ bool IcompactMgr::validWorkingLitPo()
     bool * litPo = (_fOcompact)? _litRPo: _litPo;
 
     for(int i=0; i<nPo; i++)
-        if(litPo) { count++; }
+        if(litPo[i]) { count++; }
 
     if(count == 0)
-        printf("Error: Invalid litPo. Please specify po set before use\n");
+        printf("Invalid litPo. Please specify po set before use\n");
 
     return (count > 0);
 }
+
 /////////////////////////////////////////////////////////
 // Support Set
 /////////////////////////////////////////////////////////
@@ -362,9 +395,16 @@ bool IcompactMgr::validWorkingLitPo()
 void IcompactMgr::supportInfo_Func()
 {
     // build _supportInfo_func
+    if(!_fEval)
+    {
+        printf("No evaluation file.\n");
+        _fMgr = BADEVAL;
+        return;
+    }
+
     _supportInfo_func = new int*[_nPo];
     for(int i=0; i<_nPo; i++)
-        _supportInfo_func[i] = new int[_nPi];
+        _supportInfo_func[i] = new int[_nPi](); // init to zero
     
     Abc_Ntk_t* pNtk = _pNtk_func;
 
@@ -374,7 +414,7 @@ void IcompactMgr::supportInfo_Func()
     Abc_NtkForEachPo(pNtk, pPo, i)
     {
         vecSup = Abc_NtkNodeSupportInt(pNtk, i);
-        for(int j=0, n = Vec_IntSize(vecSup); j<n; j++)
+        for(int j=0, n=Vec_IntSize(vecSup); j<n; j++)
             _supportInfo_func[i][Vec_IntEntry(vecSup, j)] = 1;
     }
 }
@@ -396,7 +436,7 @@ void IcompactMgr::supportInfo_Patt()
     // build _supportInfo_patt
     _supportInfo_patt = new int*[nPo];
     for(int i=0; i<nPo; i++)
-        _supportInfo_patt[i] = new int[nPi];
+        _supportInfo_patt[i] = new int[nPi](); // init to zero
 
     for(int i=0; i<nPo; i++)
     {
@@ -545,6 +585,11 @@ Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fColla
 
 void IcompactMgr::writeCompactpla(char* outputplaFileName)
 {
+    if(!validWorkingLitPi()) // handle constant case later
+    {
+        printf("No compact pla written.\n");
+        return;
+    }
     int nPi = getWorkingPiNum();
     int nPo = getWorkingPoNum();
     bool * litPi = getWorkingLitPi();
@@ -721,92 +766,57 @@ void sat_solver_print( sat_solver* pSat, int fDimacs )
 
 int IcompactMgr::icompact_heuristic(int iterNum, double fRatio)
 {
-    int result = 0;
-    if(!validWorkingLitPo()) { return result; }
+    int result = -1;
+    if(mgrStatus()) { return -1; }
+    if(!validWorkingLitPo()) { return -1; }
 
-    int nPi = getWorkingPiNum();
-    // int nPo = getWorkingPoNum();
-    bool * litPi = getWorkingLitPi();
-    bool * litPo = getWorkingLitPo();
-    char * plaFile = _workingFileName;
-    // ICompactHeuristicMgr parses pi/po by readFile
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr();
-    mgr->readFile(plaFile);
+    bool * minMask;
+    
+    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName);
     mgr->lockEntry(fRatio);
-
-    size_t maskCount, minMaskCount;
-    char *mask, *minMask;
-    vector<size_t> varOrder;
-
-    // solve
-    mask = new char[nPi+1];
-    mask[nPi] = '\0';
-    minMaskCount = nPi;
-    minMask = new char[nPi+1];
-    minMask[nPi] = '\0';
-    for(size_t i=0; i<nPi; i++)
-        varOrder.push_back(i);
-
-    for(int iter=0; iter<iterNum; iter++)
-    {
-        printf("Solve heuristic - iter %i\n", iter);
-        random_shuffle(varOrder.begin(), varOrder.end());
-        random_shuffle(varOrder.begin(), varOrder.end());        
-#ifdef DEBUG
-        for(size_t i=0; i<nPi; i++)
-            cout << varOrder[i] << " ";
-        cout << endl;
-#endif
-        for(size_t i=0; i<nPi; i++)
-            mask[i] = '1';
-        for(size_t i=0; i<nPi; i++)
-        {
-            size_t test = varOrder[i];
-            if(mgr->getLocked(test))
-                continue;
-            mask[test] = '0'; // drop var
-            mgr->maskOne(test);
-            if(mgr->findConflict(litPo))
-            {
-                mask[test] = '1'; // preserve var
-                mgr->undoOne();
-            }        
-        }
-        maskCount = nPi;
-        for(size_t i=0; i<nPi; i++)
-            if(mask[i] == '0')
-                maskCount--; 
-        if(maskCount <= minMaskCount)
-        {
-            minMaskCount = maskCount;
-            for(int i=0; i<nPi; i++)
-                minMask[i] = mask[i];
-        }
-    }
+    minMask = mgr->compact_drop(iterNum);
 
     // report
+    int nPi = getWorkingPiNum();
+    bool * litPi = getWorkingLitPi();
     for(size_t i=0; i<nPi; i++)
         litPi[i] = 0;
     for(size_t i=0; i<nPi; i++)
     {
-        if(minMask[i] == '1')
+        if(minMask[i] == 1)
         {
             litPi[i] = 1;
             result++;
         }
     }
 
-    // clean up
-    delete [] mask;
-    delete [] minMask;
+    return result;
+}
+
+int IcompactMgr::icompact_heuristic_support_given(int iterNum, double fRatio)
+{
+    int result = -1;
+    if(mgrStatus()) { return -1; }
+    if(_fOcompact)
+    {
+        printf("icompact_heuristic_support_given() is not supported post output compaction.\n");
+        return -1;
+    }
+    if(!_fSupportFunc)
+    {
+        printf("icompact_heuristic_support_given() has no support info.\n");
+        return -1;
+    }
+
     return result;
 }
 
 // precondition: _pNtk_func, _pNtk_careset
 int IcompactMgr::icompact_main()
 {
-    int result = 0;
-    if(!validWorkingLitPo()) { return result; }
+    int result = -1;
+    if(mgrStatus()) { return -1; }
+    if(!validWorkingLitPo()) { return -1; }
 
     int nPi = getWorkingPiNum();
     int nPo = getWorkingPoNum();
@@ -1056,8 +1066,9 @@ int IcompactMgr::icompact_main()
 // precondition: _workingFileName, pNtk_careset
 int IcompactMgr::icompact_direct_encode_with_c()
 {
-    int result = 0;
-    if(!validWorkingLitPo()) { return result; }
+    int result = -1;
+    if(mgrStatus()) { return -1; }
+    if(!validWorkingLitPo()) { return -1; }
 
     int nPi = getWorkingPiNum();
     int nPo = getWorkingPoNum();
