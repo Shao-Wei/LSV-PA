@@ -21,9 +21,7 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// icompact return -1 when fail
-// move icompact heuristic into mgr class
-// add class pattern destructor
+// icompact heuristic each (bug: conflicts)
 
 ///////////////////////////
 // Todo
@@ -33,6 +31,10 @@ ABC_NAMESPACE_HEADER_START
 // support handling after compaction
 // reencode methods should return -1 when fail
 // handle constant po where compaction result returns 0
+// icompact heuristic reusable patterns
+// icompact heuristic scheme add
+// * construct over all circuit 
+// check unvalid char when reading pla
 
 
 // base/abci/abcStrash.c
@@ -42,14 +44,12 @@ extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 );
 extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
 
 enum SolvingType {
-    HEURISTIC_SINGLE = 0,
-    HEURISTIC_8 = 1,
-    HEURISTIC_SUPPORT = 7, // support given
-    HEURISTIC_EACH = 6, // eachPo mode, while others are fullPo mode
+    HEURISTIC = 0,
+    HEURISTIC_EACH = 1, // eachPo mode, while others are fullPo mode
     LEXSAT_CLASSIC = 2,
     LEXSAT_ENCODE_C = 3,
     REENCODE = 4,
-    NONE = 5    
+    NONE = 5  
 };
 
 enum MinimizeType {
@@ -73,7 +73,7 @@ public:
 
     // main functions
     int ocompact(int fOutput, int fNewVar);
-    int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch);
+    int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch, int fIter, int fSupport);
 
     // get ntk functions
     Abc_Ntk_t * getNtkImap(); // later
@@ -107,8 +107,8 @@ private:
     abctime _step_time, _end_time;
 
     // support set
-    int ** _supportInfo_func; // support of each PO of _pNtk_func in set of CI node IDs
-    int ** _supportInfo_patt; // support of each PO of samples file in set of CI index. later
+    int ** _supportInfo_func; // [i][j] if po i has support pi j
+    int ** _supportInfo_patt; // [i][j] if po i has support pi j
     void supportInfo_Func();
     void supportInfo_Patt();
 
@@ -152,15 +152,15 @@ private:
     bool mgrStatus();
     void resetWorkingLitPi();
     void resetWorkingLitPo();
-    bool validWorkingLitPi(); // check if working litPi has at least one 1
-    bool validWorkingLitPo(); // check if working litPo has at least one 1
+    bool validWorkingLitPi(); 
+    bool validWorkingLitPo();
     int getWorkingPiNum() { return (_fIcompact)? _nRPi: _nPi; }
     int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
     bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
     bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
 
     // ntk functions
-    Abc_Ntk_t * getNtk_func(); // used in constructor
+    Abc_Ntk_t * getNtk_func();
     void getInfoFromSamples();
     Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
@@ -169,8 +169,8 @@ private:
     void writeCompactpla(char* outputplaFileName);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
-    int icompact_heuristic(int iterNum, double fRatio);
-    int icompact_heuristic_support_given(int iterNum, double fRatio);
+    int icompact_heuristic(int iterNum, double fRatio, int fSupport);
+    int icompact_heuristic_each(int iterNum, double fRatio, int fSupport);
     int icompact_main();
     int icompact_direct_encode_with_c();
 

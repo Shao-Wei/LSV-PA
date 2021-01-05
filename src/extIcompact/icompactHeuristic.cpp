@@ -33,6 +33,8 @@ ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName)
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     _nPo = atoi(t);
+    unused = fgets(buff, 10000, fRead); // .ilb
+    unused = fgets(buff, 10000, fRead); // .ob
     unused = fgets(buff, 10000, fRead); // .type fr
     while(fgets(buff, 10000, fRead))
     {
@@ -51,12 +53,12 @@ ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName)
     }
 
     _locked = new bool[_nPi](); // init to zero
-    _litPo = new bool[_nPo];
-    for(int i=0; i<_nPo; i++) 
-        _litPo[i] = 1;
+    _litPo = new bool[_nPo](); // init to zero
+    _supportInfo = NULL;
     _minMask = new bool[_nPi];
-    for(size_t i=0; i<_nPi; i++)
-        _varOrder.push_back(i);
+    _eachMinMask = new bool*[_nPo];
+    for(int i=0; i<_nPo; i++)
+        _eachMinMask[i] = new bool[_nPi];    
 
     // clean up
     fclose(fRead);
@@ -67,8 +69,12 @@ ICompactHeuristicMgr::~ICompactHeuristicMgr()
         delete [] _locked;
         delete [] _litPo;
         delete [] _minMask;
+        for(int i=0; i<_nPo; i++)
+            delete [] _eachMinMask[i];
+        delete [] _eachMinMask;
 }
 
+// if certain pi is consistent w/ certain po, it is locked 
 void ICompactHeuristicMgr::lockEntry(double ratio)
 {
     if(ratio < 0.01) { return; }
@@ -96,26 +102,93 @@ void ICompactHeuristicMgr::lockEntry(double ratio)
             }
 }
 
-bool * ICompactHeuristicMgr::compact_drop(int iterNum)
+// compact each po independently - scheme drop
+bool ** ICompactHeuristicMgr::compact_drop_each(int iterNum)
+{
+    bool * minMask;
+    for(int i=0; i<_nPo; i++)
+    {
+        // update _litPo
+        for(int k=0; k<_nPo; k++)
+            _litPo[k] = 0;
+        _litPo[i] = 1;
+        
+        // start solving
+        minMask = compact_drop(iterNum, 0);
+
+        // update _eachMinMask
+        for(int k=0; k<_nPi; k++)
+            _eachMinMask[i][k] = minMask[k];
+    }
+
+    return _eachMinMask;
+}
+
+// compact - scheme drop. fAllPo = 1 considers all po at once. otherwise customized litPo setting is needed.
+bool * ICompactHeuristicMgr::compact_drop(int iterNum, int fAllPo)
 {
     size_t maskCount, minMaskCount = _nPi;
-    char mask[_nPi], minMask[_nPi];
+    int mask[_nPi], minMask[_nPi];
+    int initMask[_nPi];
+    if(fAllPo) // otherwise, current _litPo setting is used
+    {
+        for(int i=0; i<_nPo; i++)
+            _litPo[i] = 1;
+    }
+
+    // set init mask, union of supports of cared po
+    if(_supportInfo == NULL)
+    {
+        for(int i=0; i<_nPi; i++)
+            initMask[i] = 1;
+    }
+    else
+    {   
+        for(int i=0; i<_nPi; i++)
+            initMask[i] = 0;
+        for(int i=0; i<_nPo; i++)
+        {
+            if(_litPo[i])
+            {
+                for(int k=0; k<_nPi; k++)
+                    if(_supportInfo[i][k]) { initMask[k] = 1; }
+            }
+        }
+    }
+    for(int i=0; i<_nPi; i++)
+        printf("%i", initMask[i]);
+    printf("\n");
+    for(int i=0; i<_nPi; i++)
+    {
+        if(!initMask[i])
+            maskOne(i);
+    }
+    _varOrder.clear();
+    for(int i=0; i<_nPi; i++)
+        if(initMask[i]) { _varOrder.push_back(i); }
+
+    // check validity of support info
+    if(findConflict(_litPo, 1))
+    {
+        printf("Initial mask causing conflict between patterns.\n");
+        return NULL;
+    }
 
     // solve
     for(int iter=0; iter<iterNum; iter++)
     {
-        printf("Solve heuristic - iter %i\n", iter);
+        // printf("Solve heuristic (drop) - iter %i\n", iter);
         varOrder_randomSuffle();
 
         for(size_t i=0; i<_nPi; i++)
-            mask[i] = 1;
-        for(size_t i=0; i<_nPi; i++)
+            mask[i] = initMask[i];
+        for(size_t i=0; i<_varOrder.size(); i++)
         {
             size_t test = _varOrder[i];
             if(isLocked(test)) { continue; }
             mask[test] = 0; // drop var
             maskOne(test);
-            if(findConflict(_litPo))
+            if(findConflict(_litPo, 0))
             {
                 mask[test] = 1; // preserve var
                 undoOne();
@@ -140,6 +213,12 @@ bool * ICompactHeuristicMgr::compact_drop(int iterNum)
     return _minMask;
 }
 
+// compact - scheme add
+bool * compact_add(int iterNum)
+{
+    return NULL;
+}
+
 void ICompactHeuristicMgr::varOrder_randomSuffle()
 {
     random_shuffle(_varOrder.begin(), _varOrder.end());
@@ -158,7 +237,7 @@ void ICompactHeuristicMgr::undoOne()
         _vecPat[i]->undoOne();
 }
 
-bool ICompactHeuristicMgr::findConflict(bool* litPo)
+bool ICompactHeuristicMgr::findConflict(bool* litPo, int fVerbose)
 {    
     sort(_vecPat.begin(), _vecPat.end(), PatternLessThan);
     // for(int i=0; i<vecPat.size(); i++)
@@ -176,7 +255,19 @@ bool ICompactHeuristicMgr::findConflict(bool* litPo)
             // check output
             for(int j=0; j<_nPo; j++)
                 if(litPo[j] && (curr_o[j] != prev_o[j]))
+                {
+                    if(fVerbose)
+                    {
+                        printf("log finConflict()\n");
+                        printf("  litPo:\n");
+                        for(int k=0; k<_nPo; k++)
+                            printf("%i", (_litPo[k])? 1:0);
+                        printf("\n  Conflict:\n");
+                        printf("  %s %s\n", prev_i, prev_o);
+                        printf("  %s %s\n", curr_i, curr_o);
+                    }
                     return 1;
+                }    
         }
         else
         {

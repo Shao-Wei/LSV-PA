@@ -115,7 +115,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int c            = 0;
     int fVerbose     = 0;
 
-    enum SolvingType fSolving = LEXSAT_ENCODE_C;
+    enum SolvingType fSolving = HEURISTIC;
     double fRatio            = 0;
     int fNewVar              = 4;
     int fCollapse            = 0;
@@ -124,6 +124,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fLog                 = 0;
     int fBatch               = 1;
     int fSupport             = 0;
+    int fIter                = 8;
     int fEval                = 0;
 
     // == Overall declaration ================
@@ -135,7 +136,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     IcompactMgr *mgr;
     // == Parse command ======================
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "eosmlnycrpvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "ieosmlnycrpvh" ) ) != EOF )
     {
         switch ( c )
         {            
@@ -179,6 +180,10 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
             case 'p':
                 fSupport ^= 1;
                 break;
+            case 'i':
+                fIter = atoi(argv[globalUtilOptind]);
+                globalUtilOptind++;
+                break;
             case 'v':
                 fVerbose ^= 1;
                 break;
@@ -204,7 +209,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     printf("[Info] IcompactMgr start\n");
     mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
     mgr->ocompact(fOutput, fNewVar);
-    mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch);
+    mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch, fIter, fSupport);
 
     /////////////////////////////////////////////////////////
     // Print Evaluation
@@ -219,20 +224,21 @@ usage:
     Abc_Print( -2, "Author(s): Shao-Wei Chu [email: r08943098@ntu.edu.tw]\n" );
     Abc_Print( -2, "\n" );
     Abc_Print( -2, "usage: icompact_cube [options] <careset.pla> <base>\n" );
-    Abc_Print( -2, "\t                         compact input variables based on specified careset\n" );
+    Abc_Print( -2, "\t                         compact pla to circuit based on specified careset\n" );
     Abc_Print( -2, "\t<careset.pla>          : careset specified in pla\n" );
     Abc_Print( -2, "\t<base>                 : neccessary intermidiate files are dumped here\n" );
     Abc_Print( -2, "\t-e <file.blif>         : original function, used for evaluation\n" );
-    Abc_Print( -2, "\t-l <result.log>        : interal signal / statistics log\n");
+    Abc_Print( -2, "\t-l <result.log>        : log file\n");
     Abc_Print( -2, "\t-o                     : output compaction type: 0(none), 1(naive), 2(select) [default = %d]\n", fOutput);
     Abc_Print( -2, "\t-s <num>               : input compaction type: 0(HEURISTIC_SINGLE), 1(HEURISTIC_8), 2(LEXSAT_CLASSIC), 3(LEXSAT_ENCODE_C), 4(REENCODE) [default = %d]\n", fSolving);
-    Abc_Print( -2, "\t-r <num>               : set ratio for input compaction lock entry [default = %f]\n", fRatio);
     Abc_Print( -2, "\t-m <num>               : minimize type:  0(NOMIN), 1(BASIC), 2(STRONG) [default = %d]\n", fMinimize);
-    Abc_Print( -2, "\t-n <num>               : set number of newly introduced variable for reencoding - effects solving type REENCODE & output compaction type select [default = %d]\n", fNewVar);
-    Abc_Print( -2, "\t-b <num>               : set batch size (have effects only when solving type being set to LEXSAT_CLASSIC) [default = %d]\n", fBatch);
     Abc_Print( -2, "\t-c                     : toggle using collapse during minimization [default = %d]\n", fCollapse );
+    Abc_Print( -2, "\t-n <num>               : (exclusive to solving type REENCODE & output compaction type select)set number of newly introduced variable [default = %d]\n", fNewVar);
+    Abc_Print( -2, "\t-b <num>               : (exclusive to solving type LEXSAT_CLASSIC) set batch size [default = %d]\n", fBatch);
+    Abc_Print( -2, "\t-r <num>               : (exclusive to input compaction heuristic) set ratio to lock entry [default = %f]\n", fRatio);
+    Abc_Print( -2, "\t-i <num>               : (exclusive to input compaction heuristic) set number of iteration [default = %f]\n", fIter);
+    Abc_Print( -2, "\t-p <num>               : (exclusive to input compaction heuristic) toggle to use support information, -e must be specified && -o must be none [default = %f]\n", fSupport);
     Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
-    Abc_Print( -2, "\t-p                     : print selected support info(for debug only)\n");
     Abc_Print( -2, "\t-h                     : print the command usage\n" );
     return 1;   
 }

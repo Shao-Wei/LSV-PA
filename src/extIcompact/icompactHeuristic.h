@@ -38,16 +38,19 @@ public:
     ICompactHeuristicMgr(char *fileName);
     ~ICompactHeuristicMgr();
 
-    // if certain pi is consistent w/ certain po, it is locked 
     void lockEntry(double ratio);
+    void supportInfo(int **info) { _supportInfo = info; } // to restrict compact 
+    void rmSupportInfo() { _supportInfo = NULL; }
 
-    // compact - scheme drop
-    bool * compact_drop(int iterNum);
+    bool ** compact_drop_each(int iterNum);
+    bool * compact_drop(int iterNum, int fAllPo);
+    bool * compact_add(int iterNum); // later. need diff ds
 
     int getnPi() { return _nPi; }
     int getnPo() { return _nPo; }
+    bool * getMinMask() { return _minMask; }
+    bool ** getEachMinMask() { return _eachMinMask; }
     
-    bool findConflict(bool* litPo);
 private:
     int _nPi;
     int _nPo;
@@ -55,8 +58,10 @@ private:
 
     bool *_locked; // record locked pi
     bool *_litPo; // record cared po 
-    vector<size_t> _varOrder;
-    bool *_minMask;
+    int ** _supportInfo;
+    vector<int> _varOrder;
+    bool *_minMask; // len _nPi
+    bool **_eachMinMask; // len _nPo * _nPi
 
     // aux
     void pushbackvecPat(int ni, char* patIn, int no, char* patOut) { Pattern* p = new Pattern(ni, patIn, no, patOut); _vecPat.push_back(p); }
@@ -64,6 +69,7 @@ private:
     bool isLocked(int idx) { return _locked[idx]; }
     void maskOne(int test);
     void undoOne();
+    bool findConflict(bool* litPo, int fVerbose);
 };
 
 #endif
