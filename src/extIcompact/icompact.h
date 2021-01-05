@@ -18,6 +18,20 @@
 #include <errno.h>
 
 ABC_NAMESPACE_HEADER_START
+///////////////////////////
+// Commit log
+///////////////////////////
+// add mgr error handling
+// add pi/po names
+// func file is optional
+
+///////////////////////////
+// Todo
+///////////////////////////
+// destructor
+// pi/po names handling after compaction
+// support handling after compaction
+
 
 // base/abci/abcStrash.c
 extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
@@ -41,10 +55,15 @@ enum MinimizeType {
     STRONG = 2
 };
 
+enum ERRORTYPE {
+    NOERROR = 0,
+    BADSAMPLES = 1 // bad samples file
+};
+
 class IcompactMgr
 {
 public:
-    IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFileName, char *baseFileName, char *resultlogFileName);
+    IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName);
     ~IcompactMgr();
 
     // main functions
@@ -65,14 +84,18 @@ public:
     void getEachConePatt(); // later
 
 private:
-    bool _fMgrLock; // something is wrong, no further compaction allowed
-    bool _fIcompact, _fOcompact;
-    bool _fSupportFunc, _fSupportPatt;
+    enum ERRORTYPE _fMgr;
+    bool _fIcompact, _fOcompact; // flag set true after input/output compaction
+    bool _fEval; // flag set true if _pNtk_func is built for eval
+    bool _fSupportFunc, _fSupportPatt; // flag set true after support set is built
     
     int _nPi, _nPo;
+    char **_piNames, **_poNames; // get from samples file
     bool *_litPi, *_litPo;
     int _nRPi, _nRPo; // Output Compaction & Input Reencoding results
     bool *_litRPi, *_litRPo;
+    char **_rpiNames, **_rpoNames;
+
     abctime _step_time, _end_time;
 
     // support set
@@ -98,7 +121,7 @@ private:
     char _inputmappingFileName[500]; // imap
 
     // intermediate pNtks
-    Abc_Ntk_t* _pNtk_func;
+    Abc_Ntk_t* _pNtk_func; // only used for evaluation
     Abc_Ntk_t* _pNtk_careset;
     Abc_Ntk_t* _pNtk_samples;
     Abc_Ntk_t* _pNtk_tmp;
@@ -117,7 +140,7 @@ private:
     double _time_imap, _time_core, _time_omap, _time_batch; // minimization time for each sub-circuit
 
     // aux functions
-    bool mgrIsLocked() { if(_fMgrLock) { printf("Something wrong. No further operations allowed.\n"); } return _fMgrLock; } // add verbose later
+    bool mgrStatus();
     void resetWorkingLitPi();
     void resetWorkingLitPo();
     bool validWorkingLitPo(); // check if working litPo has at least one 1
@@ -127,7 +150,8 @@ private:
     bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
 
     // ntk functions
-    void getNtk_func(); // used in constructor
+    Abc_Ntk_t * getNtk_func(); // used in constructor
+    void getInfoFromSamples();
     Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);

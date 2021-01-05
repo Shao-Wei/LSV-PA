@@ -15,13 +15,21 @@ ABC_NAMESPACE_IMPL_START
 // Public Functions
 /////////////////////////////////////////////////////////
 
-IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFileName, char *baseFileName, char *resultlogFileName)
+IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName)
 {
+    // set arguements
     _pAbc = pAbc; // used for executing minimization commands.
-    _funcFileName = funcFileName;
     _caresetFileName = caresetFileName;
     _baseFileName = baseFileName;
+    _funcFileName = funcFileName;
     _resultlogFileName = resultlogFileName;
+    // set flags
+    _fMgr = NOERROR;
+    _fIcompact = 0;
+    _fOcompact = 0;
+    _fSupportFunc = 0;
+    _fSupportPatt = 0;
+    // set file names
     sprintf(_samplesplaFileName,      "%s.samples.pla",   baseFileName);
     sprintf(_reducedplaFileName,      "%s.reduced.pla",   baseFileName);
     sprintf(_outputreencodedFileName, "%s.oreencode.pla", baseFileName);
@@ -31,54 +39,45 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *funcFileName, char *caresetFi
     sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
     sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
     sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
-
-    _pNtk_func    = NULL;
-    _pNtk_careset = NULL;
+    // set others to NULL
     _pNtk_samples = NULL;
+    _pNtk_careset = NULL;
     _pNtk_tmp     = NULL;
     _pNtk_imap    = NULL;
     _pNtk_core    = NULL;
     _pNtk_omap    = NULL;
-
+    
     _supportInfo_func = NULL;
     _supportInfo_patt = NULL;
 
-    // set _workingFileName to default sample file
-    strncpy(_workingFileName, _samplesplaFileName, 500);
-
+    _piNames = NULL;
+    _poNames = NULL;
+    _rpiNames = NULL;
+    _rpoNames = NULL;
+    ///////////////////////////////////////////////////
     // set basics
-    getNtk_func();
-    _litPi = new bool[_nPi];
-    _litPo = new bool[_nPo];
-    _nRPi = _nPi; // _litRPi built later
-    _nRPo = _nPo; // _litRPo built later
-
-    // set flags
-    _fMgrLock = 0;
-    _fIcompact = 0;
-    _fOcompact = 0;
-    _fSupportFunc = 0;
-    _fSupportPatt = 0;
+    getInfoFromSamples();
+    if(!mgrStatus())
+    {
+        _litPi = new bool[_nPi];
+        _litPo = new bool[_nPo];
+        _nRPi = _nPi; // _litRPi built later
+        _nRPo = _nPo; // _litRPo built later
+        strncpy(_workingFileName, _samplesplaFileName, 500);    
+    }
+    _pNtk_func = getNtk_func();
 }
 
 IcompactMgr::~IcompactMgr()
 {
-    if(_fSupportFunc)
-    {
-        // rm _supportInfo_func
-    }
 
-    if(_fSupportPatt)
-    {
-        // rm _supportInfo_patt
-    }
 }
 
 // returns _nRPo. fOutput = 1 naive, = 0 reencode
 int IcompactMgr::ocompact(int fOutput, int fNewVar)
 {
     printf("[Info] Start output compaction\n");
-    if(mgrIsLocked()) 
+    if(mgrStatus()) 
         return 0;
     if(_fOcompact) // do nothing
         return 0;
@@ -119,7 +118,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
 int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch)
 {
     printf("[Info] Start input compaction\n");
-    if(mgrIsLocked()) 
+    if(mgrStatus()) 
         return 0;
     if(_fIcompact)
         return 0;
@@ -239,33 +238,45 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
 
 Abc_Ntk_t * IcompactMgr::getNtkImap()
 {
+    if(mgrStatus()) 
+        return NULL;
     return NULL;
 }
 
 Abc_Ntk_t * IcompactMgr::getNtkCore()
 {
+    if(mgrStatus()) 
+        return NULL;
     return NULL;
 }
 
 Abc_Ntk_t * IcompactMgr::getNtkOmap()
 {
+    if(mgrStatus()) 
+        return NULL;
     return NULL;
 }
 
 void IcompactMgr::getSupportInfoFunc()
 {
+    if(mgrStatus()) 
+        return;
     supportInfo_Func();
     printf("Report support info func\n");
 }
 
 void IcompactMgr::getSupportInfoPatt()
 {
+    if(mgrStatus()) 
+        return;
     supportInfo_Patt();
     printf("Report support info patt\n");
 }
 
 void IcompactMgr::getEachConeFunc()
 {
+    if(mgrStatus()) 
+        return;
     Abc_Ntk_t* pCone;
     Abc_Obj_t* pPo;
     int i;
@@ -277,6 +288,8 @@ void IcompactMgr::getEachConeFunc()
 
 void IcompactMgr::getEachConePatt()
 {
+    if(mgrStatus()) 
+        return;
     Abc_Ntk_t* pPutOnTop = Abc_NtkPutOnTop(_pNtk_core, _pNtk_omap);
     Abc_Ntk_t* pCone;
     Abc_Obj_t* pPo;
@@ -290,6 +303,14 @@ void IcompactMgr::getEachConePatt()
 /////////////////////////////////////////////////////////
 // Aux functions
 /////////////////////////////////////////////////////////
+// returns true if something is wrong
+bool IcompactMgr::mgrStatus()
+{
+    if(_fMgr == BADSAMPLES)
+        printf("Mgr lockdown. Error: Bad samples file \n");
+    
+    return (_fMgr != NOERROR);
+}
 
 void IcompactMgr::resetWorkingLitPi()
 {
@@ -391,14 +412,47 @@ void IcompactMgr::supportInfo_Patt()
 /////////////////////////////////////////////////////////
 // Ntk Functions
 /////////////////////////////////////////////////////////
-void IcompactMgr::getNtk_func()
+Abc_Ntk_t * IcompactMgr::getNtk_func()
 {
-    _pNtk_func = Io_ReadBlif(_funcFileName, 1);
-    _pNtk_func = Abc_NtkToLogic(_pNtk_func);
-    _pNtk_func = Abc_NtkStrash(_pNtk_func, 0, 0, 0);
+    if(_funcFileName != NULL)
+    {
+        _pNtk_func = Io_ReadBlif(_funcFileName, 1);
+        _pNtk_func = Abc_NtkToLogic(_pNtk_func);
+        _pNtk_func = Abc_NtkStrash(_pNtk_func, 0, 0, 0);
+        // check consistency w/ samples
+        if(Abc_NtkPiNum(_pNtk_func) != _nPi || Abc_NtkPoNum(_pNtk_func) != _nPo)
+        { 
+            printf("Evaluation file %s is not consistent with sampling file. File dropped.\n", _funcFileName); 
+            return NULL;
+        }
+        _fEval = 1;
+        return _pNtk_func;
+    }
+    return NULL;
+}
+
+void IcompactMgr::getInfoFromSamples()
+{
+    Abc_Ntk_t *pNtk = Io_Read(_samplesplaFileName, Io_ReadFileType(_samplesplaFileName), 1, 0);
+    if(pNtk == NULL)
+    {
+        printf("Bad samples file %s.\n", _samplesplaFileName);
+        _fMgr = BADSAMPLES;
+        return;
+    }
+
+    Abc_Obj_t *pObj;
+    int i;
     // set _nPi, _nPo
-    _nPi = Abc_NtkPiNum(_pNtk_func);
-    _nPo = Abc_NtkPoNum(_pNtk_func);
+    _nPi = Abc_NtkPiNum(pNtk);
+    _nPo = Abc_NtkPoNum(pNtk);
+    // set names
+    _piNames = new char*[_nPi];
+    Abc_NtkForEachPi(pNtk, pObj, i)
+        _piNames[i] = Abc_ObjName(pObj);
+    _poNames = new char*[_nPo];
+    Abc_NtkForEachPo(pNtk, pObj, i)
+        _poNames[i] = Abc_ObjName(pObj);
 }
 
 // Caution: may result in huge Ntk. Batching added later.
@@ -1307,15 +1361,14 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
 {
     char* plaFile = _workingFileName;
     int nRPo;
-    FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
-    FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
-    FILE* fMapping  = fopen(mapping, "w");         // .i .o .type fr
+    FILE* ff, *fReencode, *fMapping;
     char buff[102400];
     char* t;
     char * unused __attribute__((unused)); // get rid of fget warnings
     int count = 0;
     std::map<std::string, int> mapVar;
 
+    ff = fopen(plaFile, "r"); // .i .o .type fr
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
@@ -1336,16 +1389,22 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
     char* one_line = new char[nRPo+1];
     one_line[nRPo] = '\0';
     int encoding;
+
+    // header
+    fReencode = fopen(reencodeplaFile, "w");
+    fprintf(fReencode, ".i %i\n", _nPi);
+    fprintf(fReencode, ".o %i\n", nRPo);
+    fprintf(fReencode, ".type fr");
+
+    fMapping  = fopen(mapping, "w");
+    fprintf(fMapping, ".i %i\n", nRPo);
+    fprintf(fMapping, ".o %i\n", _nPo);
+    fprintf(fMapping, ".type fr");
+
     ff = fopen(plaFile, "r");
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, ".i %i\n", nRPo);
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, ".o %i\n", nRPo);
-    fprintf(fMapping, "%s", buff);
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, "%s", buff);
     while(fgets(buff, 102400, ff))
     {
         t = strtok(buff, " \n");

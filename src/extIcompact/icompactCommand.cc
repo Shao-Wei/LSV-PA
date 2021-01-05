@@ -117,19 +117,19 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
     enum SolvingType fSolving = LEXSAT_ENCODE_C;
     double fRatio            = 0;
-    int fNewVar              = 1;
+    int fNewVar              = 4;
     int fCollapse            = 0;
     enum MinimizeType fMinimize  = BASIC;
     int fOutput              = 0;
     int fLog                 = 0;
     int fBatch               = 1;
     int fSupport             = 0;
-    int fEach                = 0;
+    int fEval                = 0;
 
     // == Overall declaration ================
-    char *funcFileName      = NULL;
     char *caresetFileName   = NULL;
     char *baseFileName      = NULL;
+    char *funcFileName      = NULL;
     char *resultlogFileName = NULL;
     
     IcompactMgr *mgr;
@@ -140,7 +140,9 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
         switch ( c )
         {            
             case 'e': // for experiment only
-                fEach ^= 1;
+                fEval ^= 1;
+                funcFileName = argv[globalUtilOptind];
+                globalUtilOptind++;
                 break;
             case 'o':
                 fOutput = atoi(argv[globalUtilOptind]);
@@ -186,13 +188,11 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 goto usage;
         }
     }
-    if ( argc != globalUtilOptind + 3 )
+    if ( argc != globalUtilOptind + 2 )
     {
-        printf("Missing arguements..\n");
+        printf("Missing arguements.. Please specify careset file as well as base name for intermediate files.\n");
         goto usage;
     }
-    funcFileName = argv[globalUtilOptind];
-    globalUtilOptind++;
     caresetFileName = argv[globalUtilOptind];
     globalUtilOptind++;
     baseFileName = argv[globalUtilOptind];
@@ -202,7 +202,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // Start Main
     /////////////////////////////////////////////////////////
     printf("[Info] IcompactMgr start\n");
-    mgr = new IcompactMgr(pAbc, funcFileName, caresetFileName, baseFileName, resultlogFileName);
+    mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
     mgr->ocompact(fOutput, fNewVar);
     mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch);
 
@@ -218,14 +218,14 @@ usage:
     Abc_Print( -2, "Input / Output Compaction on High Dimensional Boolean Space\n" );
     Abc_Print( -2, "Author(s): Shao-Wei Chu [email: r08943098@ntu.edu.tw]\n" );
     Abc_Print( -2, "\n" );
-    Abc_Print( -2, "usage: icompact_cube [options] <file.blif> <careset.pla> <output path>\n" );
+    Abc_Print( -2, "usage: icompact_cube [options] <careset.pla> <base>\n" );
     Abc_Print( -2, "\t                         compact input variables based on specified careset\n" );
-    Abc_Print( -2, "\t<file.blif>            : original function\n" );
     Abc_Print( -2, "\t<careset.pla>          : careset specified in pla\n" );
-    Abc_Print( -2, "\t<output path>          : neccessary midway files are dumped here\n" );
+    Abc_Print( -2, "\t<base>                 : neccessary intermidiate files are dumped here\n" );
+    Abc_Print( -2, "\t-e <file.blif>         : original function, used for evaluation\n" );
     Abc_Print( -2, "\t-l <result.log>        : interal signal / statistics log\n");
     Abc_Print( -2, "\t-o                     : output compaction type: 0(none), 1(naive), 2(select) [default = %d]\n", fOutput);
-    Abc_Print( -2, "\t-s <num>               : solving type:   0(HEURISTIC_SINGLE), 1(HEURISTIC_8), 2(LEXSAT_CLASSIC), 3(LEXSAT_ENCODE_C), 4(REENCODE) [default = %d]\n", fSolving);
+    Abc_Print( -2, "\t-s <num>               : input compaction type: 0(HEURISTIC_SINGLE), 1(HEURISTIC_8), 2(LEXSAT_CLASSIC), 3(LEXSAT_ENCODE_C), 4(REENCODE) [default = %d]\n", fSolving);
     Abc_Print( -2, "\t-r <num>               : set ratio for input compaction lock entry [default = %f]\n", fRatio);
     Abc_Print( -2, "\t-m <num>               : minimize type:  0(NOMIN), 1(BASIC), 2(STRONG) [default = %d]\n", fMinimize);
     Abc_Print( -2, "\t-n <num>               : set number of newly introduced variable for reencoding - effects solving type REENCODE & output compaction type select [default = %d]\n", fNewVar);
