@@ -30,19 +30,20 @@ void ReencodeHeuristicMgr::readFile(char* fileName, bool type)
     FILE * fRead = fopen(fileName, "r");
     char buff[10000];
     char *t;
+    char * unused __attribute__((unused));
     int nPi, nPo;
     map<string, PartialPattern*> checkMap;
 
-    fgets(buff, 10000, fRead); // .i n
+    unused = fgets(buff, 10000, fRead); // .i n
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     nPi = atoi(t);
-    fgets(buff, 10000, fRead); // .o m
+    unused = fgets(buff, 10000, fRead); // .o m
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     nPo = atoi(t);
     length = (type)? nPi: nPo;
-    fgets(buff, 10000, fRead); // .type fr
+    unused = fgets(buff, 10000, fRead); // .type fr
     while(fgets(buff, 10000, fRead))
     {
         char* one_line_o = new char[length+1];

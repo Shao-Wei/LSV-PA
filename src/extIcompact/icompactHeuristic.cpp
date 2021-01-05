@@ -23,16 +23,17 @@ void ICompactHeuristicMgr::readFile(char *fileName)
     FILE * fRead = fopen(fileName, "r");
     char buff[10000];
     char *t;
+    char * unused __attribute__((unused));
 
-    fgets(buff, 10000, fRead); // .i n
+    unused = fgets(buff, 10000, fRead); // .i n
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     nPi = atoi(t);
-    fgets(buff, 10000, fRead); // .o m
+    unused = fgets(buff, 10000, fRead); // .o m
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     nPo = atoi(t);
-    fgets(buff, 10000, fRead); // .type fr
+    unused = fgets(buff, 10000, fRead); // .type fr
     while(fgets(buff, 10000, fRead))
     {
         char* one_line_i = new char[nPi+1];

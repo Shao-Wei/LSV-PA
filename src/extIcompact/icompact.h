@@ -19,6 +19,12 @@
 
 ABC_NAMESPACE_HEADER_START
 
+// base/abci/abcStrash.c
+extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
+
+/*== base/abci/abcDar.c ==*/
+extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
+
 enum SolvingType {
     HEURISTIC_SINGLE = 0,
     HEURISTIC_8 = 1,
@@ -59,6 +65,7 @@ public:
     void getEachConePatt(); // later
 
 private:
+    bool _fMgrLock; // something is wrong, no further compaction allowed
     bool _fIcompact, _fOcompact;
     bool _fSupportFunc, _fSupportPatt;
     
@@ -110,8 +117,10 @@ private:
     double _time_imap, _time_core, _time_omap, _time_batch; // minimization time for each sub-circuit
 
     // aux functions
+    bool mgrIsLocked() { if(_fMgrLock) { printf("Something wrong. No further operations allowed.\n"); } return _fMgrLock; } // add verbose later
     void resetWorkingLitPi();
     void resetWorkingLitPo();
+    bool validWorkingLitPo(); // check if working litPo has at least one 1
     int getWorkingPiNum() { return (_fIcompact)? _nRPi: _nPi; }
     int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
     bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
@@ -123,7 +132,7 @@ private:
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
-    int writeCompactpla(char* outputplaFileName);
+    void writeCompactpla(char* outputplaFileName);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio);

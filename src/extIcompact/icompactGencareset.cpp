@@ -145,6 +145,7 @@ int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int
     FILE *fcareset = fopen(caresetFilename, "r");
     FILE *fpatterns = fopen(patternsFileName, "w");
     char buff[102400];
+    char * unused __attribute__((unused));
     int minterm_total;
     int enum_count;
     int local_count;
@@ -155,8 +156,8 @@ int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int
     for(int i=nPi+1; i<nPi+nPo+1; i++)
         one_line[i] = '0';
 
-    fgets(buff, 102400, fcareset); // no header needed for simulation file
-    fgets(buff, 102400, fcareset);
+    unused = fgets(buff, 102400, fcareset); // no header needed for simulation file
+    unused = fgets(buff, 102400, fcareset);
     while(fgets(buff, 102400, fcareset))
     {
         for(int i=0;i<nPi; i++)

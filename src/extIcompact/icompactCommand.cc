@@ -103,7 +103,7 @@ usage:
     return 1;   
 }
 
-static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     /*
     Print out full mode info for clear doc.
@@ -127,11 +127,12 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fEach                = 0;
 
     // == Overall declaration ================
-    char *funcFileName;
-    char *caresetFileName;
-    char *baseFileName;
-    char *resultlogFileName;
-   
+    char *funcFileName      = NULL;
+    char *caresetFileName   = NULL;
+    char *baseFileName      = NULL;
+    char *resultlogFileName = NULL;
+    
+    IcompactMgr *mgr;
     // == Parse command ======================
     Extra_UtilGetoptReset();
     while ( ( c = Extra_UtilGetopt( argc, argv, "eosmlnycrpvh" ) ) != EOF )
@@ -201,7 +202,7 @@ static int icompact_cube_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // Start Main
     /////////////////////////////////////////////////////////
     printf("[Info] IcompactMgr start\n");
-    IcompactMgr *mgr = new IcompactMgr(pAbc, funcFileName, caresetFileName, baseFileName, resultlogFileName);
+    mgr = new IcompactMgr(pAbc, funcFileName, caresetFileName, baseFileName, resultlogFileName);
     mgr->ocompact(fOutput, fNewVar);
     mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch);
 
@@ -224,7 +225,7 @@ usage:
     Abc_Print( -2, "\t<output path>          : neccessary midway files are dumped here\n" );
     Abc_Print( -2, "\t-l <result.log>        : interal signal / statistics log\n");
     Abc_Print( -2, "\t-o                     : output compaction type: 0(none), 1(naive), 2(select) [default = %d]\n", fOutput);
-    Abc_Print( -2, "\t-s <num>               : solving type:   0(HEURISTIC_SINGLE), 1(HEURISTIC_8), 2(LEXSAT_CLASSIC-blackbox if -b specified, whitebox otherwise), 3(LEXSAT_ENCODE_C), 4(REENCODE) [default = %d]\n", fSolving);
+    Abc_Print( -2, "\t-s <num>               : solving type:   0(HEURISTIC_SINGLE), 1(HEURISTIC_8), 2(LEXSAT_CLASSIC), 3(LEXSAT_ENCODE_C), 4(REENCODE) [default = %d]\n", fSolving);
     Abc_Print( -2, "\t-r <num>               : set ratio for input compaction lock entry [default = %f]\n", fRatio);
     Abc_Print( -2, "\t-m <num>               : minimize type:  0(NOMIN), 1(BASIC), 2(STRONG) [default = %d]\n", fMinimize);
     Abc_Print( -2, "\t-n <num>               : set number of newly introduced variable for reencoding - effects solving type REENCODE & output compaction type select [default = %d]\n", fNewVar);
@@ -248,10 +249,11 @@ static int checkesp_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     char * extension = ".esp.pla";
     int gate_count, input_count;
     double runtime;
+    int unused_i __attribute__((unused)); // get rid of system warnings
 
     char Command[1000];
-    char strongCommand[1000]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
-    char collapseCommand[1000] = "collapse";
+    // char strongCommand[1000]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
+    // char collapseCommand[1000] = "collapse";
     char minimizeCommand[1000] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
                                   resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
                                   resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
@@ -284,7 +286,7 @@ static int checkesp_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
     step_time = Abc_Clock();
     sprintf( Command, "./espresso %s", fileName);
-    system( Command );
+    unused_i = system( Command );
     sprintf( Command, "read %s", resultName);
     if(Cmd_CommandExecute(pAbc,Command))
     {
@@ -327,6 +329,8 @@ static int readplabatch_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                                   resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
                                   refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
     char buff[102400];
+    char * unused_c __attribute__((unused)); // get rid of fget warnings
+    int    unused_i __attribute__((unused)); // get rid of system warnings
 
     char* funcFileName;
     char espFileName[1000];
@@ -364,11 +368,11 @@ static int readplabatch_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
         // sub-pla
         fRead = fopen(funcFileName, "r");
         fWrite = fopen(espFileName, "w");
-        fgets(buff, 102400, fRead);
+        unused_c = fgets(buff, 102400, fRead);
         fprintf(fWrite, "%s\n", buff);
-        fgets(buff, 102400, fRead);
+        unused_c = fgets(buff, 102400, fRead);
         fprintf(fWrite, "%s\n", buff);
-        fgets(buff, 102400, fRead);
+        unused_c = fgets(buff, 102400, fRead);
         fprintf(fWrite, "%s\n", buff);
         while(fgets(buff, 102400, fRead))
         {     
@@ -387,7 +391,7 @@ static int readplabatch_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
         // espresso
         sprintf(Command, "./espresso %s", espFileName);
-        system(Command);
+        unused_i = system(Command);
 
         // get subNtk
         sprintf(Command, "r %s; strash", espResultFileName);
@@ -457,9 +461,9 @@ static int readplabatch_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
     //clean up
     sprintf(Command, "rm %s", espFileName);
-    system(Command);
+    unused_i = system(Command);
     sprintf(Command, "rm %s", espResultFileName);
-    system(Command);
+    unused_i = system(Command);
     for( i=0; i<batchnum; i++)
         Abc_NtkDelete(allNtks[i]);
     ABC_FREE(allNtks);
@@ -647,7 +651,7 @@ usage:
 // called during ABC startup
 static void init(Abc_Frame_t* pAbc)
 { 
-    Cmd_CommandAdd( pAbc, "AlCom", "icompact_cube", icompact_cube_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "compact", compact_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "gencareset", gencareset_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
     Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);

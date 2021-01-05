@@ -7,18 +7,19 @@ int espresso_input_count(char* filename)
 {
     char buff[102400];
     char* t;
+    char * unused __attribute__((unused));
 
     int nPi;
     bool* lit;
     int count;
 
     FILE* f = fopen(filename, "r");
-    fgets(buff, 102400, f); // skip
+    unused = fgets(buff, 102400, f); // skip
     t = strtok(buff, " \n"); // skip
     t = strtok(NULL, " \n");
     nPi = atoi(t);
-    fgets(buff, 102400, f); // skip
-    fgets(buff, 102400, f); // skip
+    unused = fgets(buff, 102400, f); // skip
+    unused = fgets(buff, 102400, f); // skip
     
     lit = new bool[nPi];
     for(int i=0; i<nPi; i++)
@@ -52,14 +53,15 @@ int espresso_input_count(char* filename)
 int check_pla_pipo(char *pFileName, int nPi, int nPo)
 {
     char buff[102400];
-    char* t;
+    char * t;
+    char * unused __attribute__((unused));
     FILE* fPla = fopen(pFileName, "r");
 
-    fgets(buff, 102400, fPla);
+    unused = fgets(buff, 102400, fPla);
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     if(atoi(t) != nPi) { fclose(fPla); return 1; }
-    fgets(buff, 102400, fPla);
+    unused = fgets(buff, 102400, fPla);
     t = strtok(buff, " \n");
     t = strtok(NULL, " \n");
     if(atoi(t) != nPo) { fclose(fPla); return 1; }
