@@ -21,15 +21,14 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// change get support func
-// icompact heuristic constructor mem handled
-// icompact heuristic reusable patterns
-// icompact heuristic each
+// construct circuit for heuristic each
 
 ///////////////////////////
 // Todo
 ///////////////////////////
 // (icompactGencareset) simulation accuracy report
+// construct circuit rm warning + bug fix
+
 // (icompactGencareset) n_gen_Random checkpattern removal
 // destructor
 // pi/po names handling after compaction
@@ -38,7 +37,7 @@ ABC_NAMESPACE_HEADER_START
 // handle constant po where compaction result returns 0
 // icompact heuristic scheme add
 // * construct over all circuit 
-// check unvalid char when reading pla
+// check unvalid char when reading pla 
 
 
 // base/abci/abcStrash.c
@@ -67,7 +66,9 @@ enum ERRORTYPE {
     BADSAMPLES = 1, // bad samples file
     BADEVAL = 2, // bad func file
     ICOMPACT_FAIL = 3,  // icompact failure
-    FUNC_NAME_NOT_CONSISTANT = 4 // pi/po names not consistant between func & samples
+    FUNC_NAME_NOT_CONSISTANT = 4, // pi/po names not consistant between func & samples
+    CONSTRUCT_NTK_FAIL = 5,
+    NTK_FAIL_SIMULATION = 6
 };
 
 class IcompactMgr
@@ -138,7 +139,6 @@ private:
     Abc_Ntk_t* _pNtk_func; // only used for evaluation
     Abc_Ntk_t* _pNtk_careset;
     Abc_Ntk_t* _pNtk_samples;
-    Abc_Ntk_t* _pNtk_tmp;
     Abc_Ntk_t* _pNtk_imap;
     Abc_Ntk_t* _pNtk_core;
     Abc_Ntk_t* _pNtk_omap;
@@ -163,19 +163,24 @@ private:
     int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
     bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
     bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
+    void getInfoFromSamples();
+    bool singleSupportComplement(int piIdx, int poIdx); // see if po is complemented thru samples file
 
     // ntk functions
     Abc_Ntk_t * getNtk_func();
-    void getInfoFromSamples();
     Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
+    Abc_Ntk_t * constructNtk(bool **minMaskList);
+
+    // verify
+    int ntkVerifySamples(Abc_Ntk_t* pNtk);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);
-    int icompact_heuristic_each(int iterNum, double fRatio, int fSupport);
+    bool** icompact_heuristic_each(int iterNum, double fRatio, int fSupport); // non-single result, compaction matrix returned 
     int icompact_main();
     int icompact_direct_encode_with_c();
 
@@ -189,6 +194,7 @@ extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int 
 
 // icompactGencareset.cpp
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
+int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName);
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
 void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
 void n_gen_Random(int nPat, int nPi, int nPo, char* filename);

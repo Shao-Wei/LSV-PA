@@ -40,6 +40,65 @@ int smlWriteGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, char* pfilen
     return 0;
 }
 
+int smlCompareGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
+{
+    int k, i;
+    char goldenBit;
+    Aig_Obj_t * pObj;
+    
+    Aig_Man_t * pAig = p->pAig;
+    bool fCorrect;
+    int correctCount = 0;
+
+    for(k=0; k<nPart; k++)
+    {
+        fCorrect = 1;
+        Aig_ManForEachCo(pAig, pObj, i)
+        {
+            goldenBit = Vec_StrEntry(vSimInfo, (k+1)*Aig_ManCiNum(pAig)+ k*Aig_ManCoNum(pAig) + i);
+            if(Abc_InfoHasBit(Fra_ObjSim( p, pObj->Id ), k) != goldenBit) 
+            {
+                fCorrect = 0;
+                break;
+            } 
+        }
+        if(fCorrect) { correctCount++; }
+    }
+
+    return correctCount;
+}
+
+// modified from src/proof/fra/fraSim.c Fra_SmlSimulateReadFile
+Vec_Str_t * smlSimulateReadFile( char * pFileName, int nIgnore)
+{
+    Vec_Str_t * vRes;
+    FILE * pFile;
+    int c;
+    char buff[102400];
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    pFile = fopen( pFileName, "rb" );
+    if ( pFile == NULL )
+    {
+        printf( "Cannot open file \"%s\" with simulation patterns.\n", pFileName );
+        return NULL;
+    }
+    for(int i=0; i<nIgnore; i++) { unused = fgets(buff, 102400, pFile); } // skip lines
+    vRes = Vec_StrAlloc( 1000 );
+    while ( (c = fgetc(pFile)) != EOF )
+    {
+        if ( c == '0' || c == '1' )
+            Vec_StrPush( vRes, (char)(c - '0') );
+        else if ( c != ' ' && c != '\r' && c != '\n' && c != '\t' )
+        {
+            printf( "File \"%s\" contains symbol (%c) other than \'0\' or \'1\'.\n", pFileName, (char)c );
+            Vec_StrFreeP( &vRes );
+            break;
+        }
+    }
+    fclose( pFile );
+    return vRes;
+}
+
 // modified from src/proof/fra/fraSim.c Fra_SmlInitializeGiven
 void smlInitializeGiven( Fra_Sml_t * p, Vec_Str_t * vSimInfo )
 {
@@ -83,14 +142,14 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
 
     // read comb patterns from file
-    vSimInfo = Fra_SmlSimulateReadFile( pFileName );
+    vSimInfo = smlSimulateReadFile( pFileName, 0 );
     if ( vSimInfo == NULL )
         return 1;
 
     patLen = Aig_ManCiNum(pAig)+Aig_ManCoNum(pAig);
     if ( Vec_StrSize(vSimInfo) % patLen != 0 )
     {
-        printf( "File \"%s\": The number of binary digits (%d) is not divisible by the number of pi (%d) and po (%d).\n", 
+        printf( "File \"%s\": The number of binary digits (%d) is not divisible by the number of pi (%d) + po (%d).\n", 
             pFileName, Vec_StrSize(vSimInfo), Aig_ManCiNum(pAig), Aig_ManCoNum(pAig) );
         Vec_StrFree( vSimInfo );
         return 1;
@@ -138,6 +197,60 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     Vec_StrFree( vSimInfo );
     Aig_ManStop(pAig);
     return 0;
+}
+
+// modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
+int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
+{
+    Vec_Str_t * vSimInfo, * vSimPart;
+    Fra_Sml_t * p = NULL;
+    int nPatterns, nPart, nPatPerSim;
+    int patLen;
+    int correctCount, totalCount = 0;
+    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
+
+    // read comb patterns from file
+    vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
+    if ( vSimInfo == NULL )
+        return 1;
+
+    patLen = Aig_ManCiNum(pAig)+Aig_ManCoNum(pAig);
+    if ( Vec_StrSize(vSimInfo) % patLen != 0 )
+    {
+        printf( "File \"%s\": The number of binary digits (%d) is not divisible by the number of pi (%d) + po (%d).\n", 
+            pFileName, Vec_StrSize(vSimInfo), Aig_ManCiNum(pAig), Aig_ManCoNum(pAig) );
+        Vec_StrFree( vSimInfo );
+        return 1;
+    }
+
+    // avoid seg fault: divide pattern to 128 frames per simulation
+    nPatPerSim = 4096;
+    nPatterns = Vec_StrSize(vSimInfo) / patLen;
+
+    printf("Verifying circuit:");
+    for (int n=0; n<=(nPatterns/nPatPerSim); n++)
+    {
+        nPart = (n==(nPatterns/nPatPerSim))? (nPatterns%nPatPerSim): nPatPerSim;
+        if (nPart == 0) { break; }
+        p = Fra_SmlStart( pAig, 0, 1, Abc_BitWordNum(nPart) );
+
+        vSimPart = Vec_StrAlloc(0);
+        for (int l=n*patLen*nPart; l<(n+1)*patLen*nPart; l++)
+            Vec_StrPush(vSimPart, Vec_StrEntry(vSimInfo, l));
+        
+        // start simulation
+        smlInitializeGiven( p, vSimPart );
+        Fra_SmlSimulateOne( p );
+        correctCount = smlCompareGolden(p, vSimPart, nPart);
+        totalCount += correctCount;
+
+        Vec_StrFree( vSimPart );
+        Fra_SmlStop( p );
+    }
+    printf(" : %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
+    Vec_StrFree( vSimInfo );
+    Aig_ManStop(pAig);
+    return (totalCount == nPatterns)? 1: 0;
 }
 
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo)

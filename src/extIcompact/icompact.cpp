@@ -42,7 +42,6 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     // set others to NULL
     _pNtk_samples = NULL;
     _pNtk_careset = NULL;
-    _pNtk_tmp     = NULL;
     _pNtk_imap    = NULL;
     _pNtk_core    = NULL;
     _pNtk_omap    = NULL;
@@ -135,44 +134,16 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     else if(fSolving == HEURISTIC_EACH)
     {
         printf("  heristic%s- %i iteration - on each PO\n", (fSupport)?" - support given ": " ", fIter);
+        bool **minMaskList;
+        
         resetWorkingLitPi();
         resetWorkingLitPo();
         _step_time = Abc_Clock();
-        result = icompact_heuristic_each(fIter, fRatio, fSupport);
-        if(result == -1) { _fMgr = ICOMPACT_FAIL; }
+        minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
+        if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-
-        // report specially handled
-        
-        /*
-        int nPo = getWorkingPoNum();
-        bool * litPo = getWorkingLitPo();
-        _step_time = Abc_Clock();
-        for(int i=0; i<nPo; i++)
-        {
-            for(int k=0; k<nPo; k++)
-                litPo[k] = 0;
-            litPo[i] = 1;
-            resetWorkingLitPi();
-            result = icompact_heuristic(1, fRatio);
-            if(result == -1) { _fMgr = ICOMPACT_FAIL; }
-            assert(result > 0);
-            writeCompactpla(_tmpFileName);
-            _pNtk_tmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
-            _pNtk_tmp = Abc_NtkToLogic(_pNtk_tmp);
-            _pNtk_tmp = Abc_NtkStrash(_pNtk_tmp, 0, 0, 0);
-            _pNtk_tmp = ntkMinimize(_pNtk_tmp, BASIC, 0);
-            if(_pNtk_core == NULL)
-                _pNtk_core = Abc_NtkDup(_pNtk_tmp);
-            else
-                Abc_NtkAppend(_pNtk_core, _pNtk_tmp, 1);
-        }
-        _end_time = Abc_Clock();
-        _pNtk_core = ntkMinimize(_pNtk_core, BASIC, 0);
-        _time_core = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-        _gate_core = Abc_NtkNodeNum(_pNtk_core);
-        printf("time: %9.2f; gate: %i\n", _time_core, _gate_core);
-        */
+        _pNtk_core = constructNtk(minMaskList);
+        if(!ntkVerifySamples(_pNtk_core)) { _fMgr = NTK_FAIL_SIMULATION; return 0; }
     }
     else if(fSolving == LEXSAT_CLASSIC)
     {
@@ -314,6 +285,11 @@ bool IcompactMgr::mgrStatus()
         printf("Mgr lockdown. Error: unexpected failure in input compaction \n");
     else if(_fMgr == FUNC_NAME_NOT_CONSISTANT)
         printf("Mgr lockdown. Error: pi/po names not consistant between evaluation & samples file\n");
+    else if(_fMgr == CONSTRUCT_NTK_FAIL)
+        printf("Mgr lockdown. Error: construction of ntk failed\n");
+    else if(_fMgr == NTK_FAIL_SIMULATION)
+        printf("Mgr lockdown. Error: constructed circuit is not consistant with given patterns\n");
+    
     return (_fMgr != NOERROR);
 }
 
@@ -373,6 +349,45 @@ bool IcompactMgr::validWorkingLitPo()
     return (count > 0);
 }
 
+void IcompactMgr::getInfoFromSamples()
+{
+    Abc_Ntk_t *pNtk = Io_Read(_samplesplaFileName, Io_ReadFileType(_samplesplaFileName), 1, 0);
+    if(pNtk == NULL)
+    {
+        printf("Bad samples file %s.\n", _samplesplaFileName);
+        _fMgr = BADSAMPLES;
+        return;
+    }
+
+    Abc_Obj_t *pObj;
+    int i;
+    // set _nPi, _nPo
+    _nPi = Abc_NtkPiNum(pNtk);
+    _nPo = Abc_NtkPoNum(pNtk);
+    // set names
+    _piNames = new char*[_nPi];
+    Abc_NtkForEachPi(pNtk, pObj, i)
+        _piNames[i] = Abc_ObjName(pObj);
+    _poNames = new char*[_nPo];
+    Abc_NtkForEachPo(pNtk, pObj, i)
+        _poNames[i] = Abc_ObjName(pObj);
+}
+
+bool IcompactMgr::singleSupportComplement(int piIdx, int poIdx)
+{
+    char iBit, oBit;
+    char buff[102400];
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    FILE* fpattern = fopen(_samplesplaFileName, "r");
+    for(int i=0; i<6; i++) // get first pattern
+        unused = fgets(buff, 102400, fpattern);
+    
+    iBit = buff[piIdx];
+    oBit = buff[_nPi + 1 + poIdx];
+
+    fclose(fpattern);
+    return (iBit != oBit);
+}
 /////////////////////////////////////////////////////////
 // Support Set
 /////////////////////////////////////////////////////////
@@ -472,30 +487,6 @@ Abc_Ntk_t * IcompactMgr::getNtk_func()
     return NULL;
 }
 
-void IcompactMgr::getInfoFromSamples()
-{
-    Abc_Ntk_t *pNtk = Io_Read(_samplesplaFileName, Io_ReadFileType(_samplesplaFileName), 1, 0);
-    if(pNtk == NULL)
-    {
-        printf("Bad samples file %s.\n", _samplesplaFileName);
-        _fMgr = BADSAMPLES;
-        return;
-    }
-
-    Abc_Obj_t *pObj;
-    int i;
-    // set _nPi, _nPo
-    _nPi = Abc_NtkPiNum(pNtk);
-    _nPo = Abc_NtkPoNum(pNtk);
-    // set names
-    _piNames = new char*[_nPi];
-    Abc_NtkForEachPi(pNtk, pObj, i)
-        _piNames[i] = Abc_ObjName(pObj);
-    _poNames = new char*[_nPo];
-    Abc_NtkForEachPo(pNtk, pObj, i)
-        _poNames[i] = Abc_ObjName(pObj);
-}
-
 // Caution: may result in huge Ntk. Batching added later.
 Abc_Ntk_t * IcompactMgr::getNtk_samples(int fMinimize, int fCollapse)
 {
@@ -584,13 +575,15 @@ Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fColla
 //     }      
 // }
 
+// write compacted pla using working _litPi/_litPo
 void IcompactMgr::writeCompactpla(char* outputplaFileName)
 {
-    if(!validWorkingLitPi()) // handle constant case later
+    if(!validWorkingLitPi()) // constant case must be handled else where
     {
         printf("No compact pla written.\n");
         return;
     }
+    
     int nPi = getWorkingPiNum();
     int nPo = getWorkingPoNum();
     bool * litPi = getWorkingLitPi();
@@ -604,26 +597,28 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     int lenPi, lenPo;
 
     int count = 0;
-    for(int i=0; i<nPi; i++)
-        if(litPi[i])
-            count++;
+    for(int i=0; i<nPi; i++) { if(litPi[i]) { count++; } }
     lenPi = count;
     count = 0;
-    for(int i=0; i<nPo; i++)
-        if(litPo[i])
-            count++;
+    for(int i=0; i<nPo; i++) { if(litPo[i]) { count++; } }
     lenPo = count;
     
     char* one_line = new char[lenPi + lenPo + 2];
     one_line[lenPi] = ' ';
     one_line[lenPi + lenPo + 1] = '\0';
 
-    unused = fgets(buff, 102400, fpattern);
-    unused = fgets(buff, 102400, fpattern);
-    unused = fgets(buff, 102400, fpattern);
+    unused = fgets(buff, 102400, fpattern); // .i
+    unused = fgets(buff, 102400, fpattern); // .o
+    unused = fgets(buff, 102400, fpattern); // .ilb
+    unused = fgets(buff, 102400, fpattern); // .ob
+    unused = fgets(buff, 102400, fpattern); // .type
     fprintf(fcompactpla, ".i %i\n", lenPi);
     fprintf(fcompactpla, ".o %i\n", lenPo);
-    fprintf(fcompactpla, ".type fr\n");
+    fprintf(fcompactpla, ".ilb");
+    for(int i=0; i<nPi; i++) { if(litPi[i]) { fprintf(fcompactpla, " %s", _piNames[i]); } }
+    fprintf(fcompactpla, "\n.ob");
+    for(int i=0; i<nPo; i++) { if(litPo[i]) { fprintf(fcompactpla, " %s", _poNames[i]); } }
+    fprintf(fcompactpla, "\n.type fr\n");
     while(fgets(buff, 102400, fpattern))
     {
         int local_count = 0;
@@ -646,6 +641,70 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     fclose(fcompactpla);
     fclose(fpattern);
     delete [] one_line;
+}
+
+Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
+{
+    Abc_Ntk_t *pNtk, *pNtkTmp;
+    Abc_Obj_t *pPi, *pPo;
+
+    // init ntk
+    pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    for(int i=0; i<_nPi; i++)
+    {
+        pPi = Abc_NtkCreatePi(pNtk);
+        Abc_ObjAssignName(pPi, _piNames[i], NULL);
+    }
+        
+    // each po function
+    vector<int> fanInList;
+    for(int poIdx=0; poIdx<_nPo; poIdx++)
+    {
+        fanInList.clear();
+        for(int piIdx=0; piIdx<_nPi; piIdx++)
+            if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
+        
+        // printf("Po %i\n", poIdx);
+        // for(int i=0, n=fanInList.size(); i<n; i++) { printf(" %s", _poNames[fanInList[i]]); }
+        // printf("\n");
+
+        if(fanInList.size() == 1) // constant node. check heuristic, it may return 0 instead of 1 !!
+        {
+            pPo = Abc_NtkCreatePo(pNtk);
+            Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
+            Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, fanInList[0]));
+            if(singleSupportComplement(fanInList[0], poIdx)) 
+                Abc_ObjSetFaninC(pPo, 0); // set complement
+        }
+        else
+        {
+            for(int i=0; i<_nPi; i++) { _litPi[i] = 0; }
+            for(int i=0, n=fanInList.size(); i<n; i++) { _litPi[fanInList[i]] = 1; }
+            for(int i=0; i<_nPo; i++) { _litPo[i] = 0; }
+            _litPo[poIdx] = 1;
+
+            writeCompactpla(_tmpFileName);
+            pNtkTmp = Io_ReadPla(_tmpFileName, 0, 0, 0, 0, 1);
+            pNtkTmp = Abc_NtkToLogic(pNtkTmp);
+            pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
+            if(!Abc_NtkAppend(pNtk, pNtkTmp, 1)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+        }
+    }
+    if (!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+    return pNtk;
+}
+
+/////////////////////////////////////////////////////////
+// Verify
+/////////////////////////////////////////////////////////
+
+// verify ntk w/ samples.pla
+int IcompactMgr::ntkVerifySamples(Abc_Ntk_t* pNtk)
+{
+    int result;
+    result = smlVerifyCombGiven(pNtk, _samplesplaFileName);
+
+    return result;
 }
 
 /////////////////////////////////////////////////////////
@@ -805,32 +864,30 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
     return result;
 }
 
-int IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSupport)
+bool ** IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSupport)
 {
-    int result = -1;
+    bool ** minMaskList;
     if(fSupport)
     {
         supportInfo_Func();
         if(_fOcompact)
         {
             printf("icompact_heuristic_each() with support info is not supported post output compaction.\n");
-            return -1;
+            return NULL;
         }
     }
-    if(mgrStatus()) { return -1; }
+    if(mgrStatus()) { return NULL; }
 
-    bool ** minMaskList;
-    
     ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName);
     mgr->lockEntry(fRatio);
     if(fSupport)
         mgr->supportInfo(_supportInfo_func);
     minMaskList = mgr->compact_drop_each(iterNum);
-    if(minMaskList == NULL) { return -1; }
+    if(minMaskList == NULL) { return NULL; }
     
     // report specially handled
 
-    return result;
+    return minMaskList;
 }
 
 // precondition: _pNtk_func, _pNtk_careset
