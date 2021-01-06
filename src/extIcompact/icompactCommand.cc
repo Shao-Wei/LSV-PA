@@ -63,8 +63,8 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 
     printf("[Info] Start generated careset\n");
     // get nPi
-    pNtk = Io_ReadBlif(blifFileName, 1);
-    pNtk = Abc_NtkToLogic(pNtk);
+    pNtk = Io_Read(blifFileName, Io_ReadFileType(blifFileName), 1, 0);
+    // pNtk = Abc_NtkToLogic(pNtk);
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     nPi = Abc_NtkPiNum(pNtk);
     nPo = Abc_NtkPoNum(pNtk);

@@ -10,11 +10,12 @@ using namespace std;
 class Pattern
 {
 public:
-    Pattern(int ni, char* i, int no, char* o) { _nPi = ni; _nPo = no; _patIn = i; _patOut = o; _preserve_idx = 0; _preserve_bit = '0'; }
-    ~Pattern() { delete [] _patIn; delete [] _patOut; }
+    Pattern(int ni, char* ipat, int no, char* opat);
+    ~Pattern() { delete [] _patIn; delete [] _patOut; delete [] _oriPatIn; }
 
     int   _nPi;
     int   _nPo;
+    char* _oriPatIn;
     char* _patIn;
     char* _patOut;
 
@@ -25,8 +26,9 @@ private:
     char  _preserve_bit;
 
     // modify pattern
-    void maskOne(int idx) { _preserve_idx = idx; _preserve_bit = _patIn[idx]; _patIn[idx] = '0'; }
+    void maskOne(int idx) { _preserve_idx = idx; _preserve_bit = _patIn[idx]; _patIn[idx] = '-'; }
     void undoOne() { _patIn[_preserve_idx] = _preserve_bit; }
+    void reset() { for(int i=0; i<_nPi; i++) { _patIn[i] = _oriPatIn[i]; } }
     
 };
 
@@ -58,6 +60,8 @@ private:
 
     bool *_locked; // record locked pi
     bool *_litPo; // record cared po 
+    bool *_currMask; // 1 reserved, 0 masked to '0'
+    int _preservedIdx;
     int ** _supportInfo;
     vector<int> _varOrder;
     bool *_minMask; // len _nPi
@@ -69,6 +73,7 @@ private:
     bool isLocked(int idx) { return _locked[idx]; }
     void maskOne(int test);
     void undoOne();
+    void reset();
     bool findConflict(bool* litPo, int fVerbose);
 };
 

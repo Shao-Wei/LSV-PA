@@ -1,7 +1,7 @@
 #include "icompact.h"
 #include "sat/cnf/cnf.h"
 #include "base/abc/abc.h"  // Abc_NtkStrash
-#include "base/io/ioAbc.h" // Io_ReadBlif
+#include "base/io/ioAbc.h" // Io_Read
 #include "bdd/extrab/extraBdd.h"
 #include <stdlib.h>        // rand()
 #include <errno.h>
@@ -312,6 +312,8 @@ bool IcompactMgr::mgrStatus()
         printf("Mgr lockdown. Error: Bad evaluation file \n");
     else if(_fMgr == ICOMPACT_FAIL)
         printf("Mgr lockdown. Error: unexpected failure in input compaction \n");
+    else if(_fMgr == FUNC_NAME_NOT_CONSISTANT)
+        printf("Mgr lockdown. Error: pi/po names not consistant between evaluation & samples file\n");
     return (_fMgr != NOERROR);
 }
 
@@ -394,14 +396,26 @@ void IcompactMgr::supportInfo_Func()
     
     Abc_Ntk_t* pNtk = _pNtk_func;
 
-    Abc_Obj_t* pPo;
-    Vec_Int_t* vecSup;
-    int i;
+    // derive support using cone
+    Abc_Ntk_t *pNtkCone;
+    Abc_Obj_t *pPo, *pPi;
+    int i, j, poIdx, piIdx;
     Abc_NtkForEachPo(pNtk, pPo, i)
     {
-        vecSup = Abc_NtkNodeSupportInt(pNtk, i);
-        for(int j=0, n=Vec_IntSize(vecSup); j<n; j++)
-            _supportInfo_func[i][Vec_IntEntry(vecSup, j)] = 1;
+        poIdx = -1;
+        for(int k=0; k<_nPo; k++)
+            if(strcmp(_poNames[k], Abc_ObjName(pPo)) == 0) { poIdx = k; break; }
+        if(poIdx == -1) { _fMgr = FUNC_NAME_NOT_CONSISTANT; return; }
+
+        pNtkCone = Abc_NtkCreateCone(pNtk, Abc_ObjFanin0(pPo), Abc_ObjName(pPo), 0);
+        Abc_NtkForEachPi(pNtkCone, pPi, j)
+        {
+            piIdx = -1;
+            for(int k=0; k<_nPi; k++)
+                if(strcmp(_piNames[k], Abc_ObjName(pPi)) == 0) { piIdx = k; break; }
+            if(piIdx == -1) { _fMgr = FUNC_NAME_NOT_CONSISTANT; return; }
+            _supportInfo_func[poIdx][piIdx] = 1;
+        }
     }
 }
 
@@ -443,8 +457,8 @@ Abc_Ntk_t * IcompactMgr::getNtk_func()
 {
     if(_funcFileName != NULL)
     {
-        _pNtk_func = Io_ReadBlif(_funcFileName, 1);
-        _pNtk_func = Abc_NtkToLogic(_pNtk_func);
+        _pNtk_func = Io_Read(_funcFileName, Io_ReadFileType(_funcFileName), 1, 0);
+        // _pNtk_func = Abc_NtkToLogic(_pNtk_func);
         _pNtk_func = Abc_NtkStrash(_pNtk_func, 0, 0, 0);
         // check consistency w/ samples
         if(Abc_NtkPiNum(_pNtk_func) != _nPi || Abc_NtkPoNum(_pNtk_func) != _nPo)
@@ -756,7 +770,7 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
     int result = -1;
     if(fSupport)
     {
-        supportInfo_Func(); // get real support
+        supportInfo_Func();
         if(_fOcompact)
         {
             printf("icompact_heuristic() with support info is not supported post output compaction.\n");
@@ -796,7 +810,7 @@ int IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSuppor
     int result = -1;
     if(fSupport)
     {
-        supportInfo_Func(); // get real support
+        supportInfo_Func();
         if(_fOcompact)
         {
             printf("icompact_heuristic_each() with support info is not supported post output compaction.\n");

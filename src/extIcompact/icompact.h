@@ -6,7 +6,7 @@
 #include "sat/bsat/satSolver.h"
 #include "sat/cnf/cnf.h"
 #include "base/abc/abc.h"  // Abc_NtkStrash
-#include "base/io/ioAbc.h" // Io_ReadBlif
+#include "base/io/ioAbc.h" // Io_Read
 #include "map/mio/mio.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,17 +21,21 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// icompact heuristic each (bug: conflicts)
+// change get support func
+// icompact heuristic constructor mem handled
+// icompact heuristic reusable patterns
+// icompact heuristic each
 
 ///////////////////////////
 // Todo
 ///////////////////////////
+// (icompactGencareset) simulation accuracy report
+// (icompactGencareset) n_gen_Random checkpattern removal
 // destructor
 // pi/po names handling after compaction
 // support handling after compaction
 // reencode methods should return -1 when fail
 // handle constant po where compaction result returns 0
-// icompact heuristic reusable patterns
 // icompact heuristic scheme add
 // * construct over all circuit 
 // check unvalid char when reading pla
@@ -62,7 +66,8 @@ enum ERRORTYPE {
     NOERROR = 0,
     BADSAMPLES = 1, // bad samples file
     BADEVAL = 2, // bad func file
-    ICOMPACT_FAIL = 3 // icompact failure
+    ICOMPACT_FAIL = 3,  // icompact failure
+    FUNC_NAME_NOT_CONSISTANT = 4 // pi/po names not consistant between func & samples
 };
 
 class IcompactMgr
