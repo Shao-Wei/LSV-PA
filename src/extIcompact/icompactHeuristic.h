@@ -37,9 +37,10 @@ static bool PatternLessThan(Pattern* a, Pattern* b);
 class ICompactHeuristicMgr
 {
 public:
-    ICompactHeuristicMgr(char *fileName);
+    ICompactHeuristicMgr(char *fileName, int fRemove);
     ~ICompactHeuristicMgr();
 
+    int uniquePat(int fRemove);
     void lockEntry(double ratio);
     void supportInfo(int **info) { _supportInfo = info; } // to restrict compact 
     void rmSupportInfo() { _supportInfo = NULL; }
@@ -50,6 +51,8 @@ public:
 
     int getnPi() { return _nPi; }
     int getnPo() { return _nPo; }
+    int getOriPatCount() { return _oriPatCount; }
+    int getUniPatCount() { return _uniquePatCount; }
     bool * getMinMask() { return _minMask; }
     bool ** getEachMinMask() { return _eachMinMask; }
     
@@ -57,6 +60,8 @@ private:
     int _nPi;
     int _nPo;
     vector<Pattern*> _vecPat;
+    int _oriPatCount, _uniquePatCount;
+    bool _fNotMasked; // toggle to true if pat has not been masked
 
     bool *_locked; // record locked pi
     bool *_litPo; // record cared po 

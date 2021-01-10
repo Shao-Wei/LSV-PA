@@ -68,8 +68,6 @@ static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     nPi = Abc_NtkPiNum(pNtk);
     nPo = Abc_NtkPoNum(pNtk);
-    // BUG - reg count non-zero while no latch exists - fails assertion in Fra_SmlSimulateCombGiven()
-    // printf("reg = %i\n", Aig_ManRegNum((Aig_Man_t*)pNtk->pManFunc));
 
     // gen careset
     printf("Generate careset file\n");
@@ -126,6 +124,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fSupport             = 0;
     int fIter                = 8;
     int fEval                = 0;
+    int fExperiment          = 0;
 
     // == Overall declaration ================
     char *caresetFileName   = NULL;
@@ -136,11 +135,15 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     IcompactMgr *mgr;
     // == Parse command ======================
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "ieosmlnycrpvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "xieosmlnycrpvh" ) ) != EOF )
     {
         switch ( c )
         {            
-            case 'e': // for experiment only
+            case 'x':
+                fExperiment = atoi(argv[globalUtilOptind]);
+                globalUtilOptind++;
+                break;
+            case 'e':
                 fEval ^= 1;
                 funcFileName = argv[globalUtilOptind];
                 globalUtilOptind++;
@@ -207,14 +210,23 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // Start Main
     /////////////////////////////////////////////////////////
     printf("[Info] IcompactMgr start\n");
+    
     mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
-    mgr->ocompact(fOutput, fNewVar);
-    mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch, fIter, fSupport);
+    if(fExperiment == 1)
+    {
+        mgr->exp_support_icompact_heuristic();
+    }
+    else
+    {
+        mgr->ocompact(fOutput, fNewVar);
+        mgr->icompact(fSolving, fRatio, fNewVar, fCollapse, fMinimize, fBatch, fIter, fSupport);
+    }
+    delete mgr;
 
     /////////////////////////////////////////////////////////
     // Print Evaluation
     /////////////////////////////////////////////////////////
-    printf("[Info]Print output files & evaluation\n");
+    printf("[Info] Print output files & evaluation\n");
 
     ////////////////////////////////////////////////////////
     return result;
@@ -238,6 +250,7 @@ usage:
     Abc_Print( -2, "\t-r <num>               : (exclusive to input compaction heuristic) set ratio to lock entry [default = %f]\n", fRatio);
     Abc_Print( -2, "\t-i <num>               : (exclusive to input compaction heuristic) set number of iteration [default = %f]\n", fIter);
     Abc_Print( -2, "\t-p <num>               : (exclusive to input compaction heuristic) toggle to use support information, -e must be specified && -o must be none [default = %f]\n", fSupport);
+    Abc_Print( -2, "\t-x <num>               : experiments [default = %d]\n", fExperiment );
     Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
     Abc_Print( -2, "\t-h                     : print the command usage\n" );
     return 1;   

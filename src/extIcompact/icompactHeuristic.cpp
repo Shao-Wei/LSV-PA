@@ -36,7 +36,7 @@ static bool PatternLessThan(Pattern* a, Pattern* b)
     return 0;
 }
 
-ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName)
+ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName, int fRemove)
 {
     FILE *fRead = fopen(fileName, "r");
     char buff[10000];
@@ -61,6 +61,7 @@ ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName)
         pushbackvecPat(_nPi, t1, _nPo, t2);
     }
 
+    _fNotMasked = 1;
     _locked = new bool[_nPi](); // init to zero
     _litPo = new bool[_nPo](); // init to zero
     _currMask = new bool[_nPi];
@@ -72,6 +73,9 @@ ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName)
     for(int i=0; i<_nPo; i++)
         _eachMinMask[i] = new bool[_nPi];    
 
+    _oriPatCount = _vecPat.size();
+    _uniquePatCount = uniquePat(fRemove);
+    
     // clean up
     fclose(fRead);
 }
@@ -84,6 +88,40 @@ ICompactHeuristicMgr::~ICompactHeuristicMgr()
         for(int i=0; i<_nPo; i++)
             delete [] _eachMinMask[i];
         delete [] _eachMinMask;
+}
+
+int ICompactHeuristicMgr::uniquePat(int fRemove)
+{
+    if(!_fNotMasked) { reset(); }
+    
+    int oriCount = _vecPat.size();
+    int newCount = 1;
+
+    sort(_vecPat.begin(), _vecPat.end(), PatternLessThan);
+
+    vector<Pattern*>::iterator it = _vecPat.begin();
+    Pattern *prev = *it, *curr;
+    it++;
+    while(it != _vecPat.end())
+    {
+        curr = *it;
+        if(strcmp(prev->_patIn, curr->_patIn) == 0)
+        {
+            if(fRemove)
+                it = _vecPat.erase(it);
+            else
+                it++;
+        }
+        else
+        {
+            newCount++;
+            prev = *it;
+            it++;
+        }
+    }
+    printf("Unique Pat: %i / %i (unique / total)\n", newCount, oriCount);
+    printf("Simulated portion: %f%% (%i inputs)\n", 100*newCount/pow(2, _nPi), _nPi);
+    return newCount;
 }
 
 // if certain pi is consistent w/ certain po, it is locked 
@@ -215,7 +253,6 @@ bool * ICompactHeuristicMgr::compact_drop(int iterNum, int fAllPo)
                 minMask[i] = mask[i];
         }
     }
-
     for(size_t i=0; i<_nPi; i++)
         _minMask[i] = minMask[i];
 
@@ -236,6 +273,7 @@ void ICompactHeuristicMgr::varOrder_randomSuffle()
 
 void ICompactHeuristicMgr::maskOne(int test)
 {
+    _fNotMasked = 0;
     _currMask[test] = 0;
     _preservedIdx = test;
     for(int i=0, n=_vecPat.size(); i<n; i++)
@@ -251,6 +289,7 @@ void ICompactHeuristicMgr::undoOne()
 
 void ICompactHeuristicMgr::reset()
 {
+    _fNotMasked = 1;
     for(int i=0, n=_vecPat.size(); i<n; i++)
         _vecPat[i]->reset();      
 }

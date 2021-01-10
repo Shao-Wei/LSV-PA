@@ -21,22 +21,19 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// construct circuit for heuristic each
-// add ntk verify by simulation
+// experiments
 
 ///////////////////////////
 // Todo
 ///////////////////////////
-// construct circuit rm warning + bug fix
-
 // (icompactGencareset) n_gen_Random checkpattern removal
 // destructor
 // pi/po names handling after compaction
 // support handling after compaction
 // reencode methods should return -1 when fail
-// handle constant po where compaction result returns 0
 // icompact heuristic scheme add
 // check unvalid char when reading pla 
+// handle constant po where compaction result returns 0
 
 
 // base/abci/abcStrash.c
@@ -76,6 +73,9 @@ public:
     IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName);
     ~IcompactMgr();
 
+    // experiments
+    int exp_support_icompact_heuristic();
+    
     // main functions
     int ocompact(int fOutput, int fNewVar);
     int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch, int fIter, int fSupport);
@@ -107,6 +107,7 @@ private:
     int _nRPi, _nRPo; // Output Compaction & Input Reencoding results
     bool *_litRPi, *_litRPo;
     char **_rpiNames, **_rpoNames;
+    int _oriPatCount, _uniquePatCount;
 
     // timing
     abctime _step_time, _end_time;

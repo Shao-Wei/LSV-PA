@@ -739,7 +739,7 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
     }
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
-    if(ntkVerifySamples(pNtk, _samplesplaFileName,1) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+    if(ntkVerifySamples(pNtk, _samplesplaFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
     return pNtk;
 }
 
@@ -876,7 +876,9 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
 
     bool * minMask;
     
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName);
+    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName, 1);
+    _oriPatCount = mgr->getOriPatCount();
+    _uniquePatCount = mgr->getUniPatCount();
     mgr->lockEntry(fRatio);
     if(fSupport)
         mgr->supportInfo(_supportInfo_func);
@@ -914,7 +916,9 @@ bool ** IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSu
     }
     if(mgrStatus()) { return NULL; }
 
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName);
+    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName, 1);
+    _oriPatCount = mgr->getOriPatCount();
+    _uniquePatCount = mgr->getUniPatCount();
     mgr->lockEntry(fRatio);
     if(fSupport)
         mgr->supportInfo(_supportInfo_func);
