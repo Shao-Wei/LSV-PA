@@ -95,7 +95,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
         _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
     
     }
-        _end_time = Abc_Clock();
+    _end_time = Abc_Clock();
 
     _time_oreencode = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     printf("reencode computation time: %9.2f\n", _time_oreencode);

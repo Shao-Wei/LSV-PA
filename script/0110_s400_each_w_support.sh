@@ -1,0 +1,11 @@
+./../abc -c "gencareset -n   3000 ../../benchmarks/ISCAS/s400.blif ../careset/s400.3000.c00.v01.careset.pla ../samples/s400.3000.c00.v01"
+./../abc -c "gencareset -n  10000 ../../benchmarks/ISCAS/s400.blif ../careset/s400.10000.c00.v01.careset.pla ../samples/s400.10000.c00.v01"
+./../abc -c "gencareset -n  30000 ../../benchmarks/ISCAS/s400.blif ../careset/s400.30000.c00.v01.careset.pla ../samples/s400.30000.c00.v01"
+./../abc -c "gencareset -n 100000 ../../benchmarks/ISCAS/s400.blif ../careset/s400.100000.c00.v01.careset.pla ../samples/s400.100000.c00.v01"
+./../abc -c "gencareset -n 300000 ../../benchmarks/ISCAS/s400.blif ../careset/s400.300000.c00.v01.careset.pla ../samples/s400.300000.c00.v01"
+
+./../abc -c "compact -x 1 -l log/0110_s400.csv -e ../../benchmarks/ISCAS/s400.blif ../careset/s400.3000.c00.v01.careset.pla ../samples/s400.3000.c00.v01"
+./../abc -c "compact -x 1 -l log/0110_s400.csv -e ../../benchmarks/ISCAS/s400.blif ../careset/s400.10000.c00.v01.careset.pla ../samples/s400.10000.c00.v01"
+./../abc -c "compact -x 1 -l log/0110_s400.csv -e ../../benchmarks/ISCAS/s400.blif ../careset/s400.30000.c00.v01.careset.pla ../samples/s400.30000.c00.v01"
+./../abc -c "compact -x 1 -l log/0110_s400.csv -e ../../benchmarks/ISCAS/s400.blif ../careset/s400.100000.c00.v01.careset.pla ../samples/s400.100000.c00.v01"
+./../abc -c "compact -x 1 -l log/0110_s400.csv -e ../../benchmarks/ISCAS/s400.blif ../careset/s400.300000.c00.v01.careset.pla ../samples/s400.300000.c00.v01"

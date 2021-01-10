@@ -12,6 +12,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     int fSupport;
     int fIter = 8;
     bool **minMaskList1, **minMaskList2;
+    double time_h1, time_h2, time_c1, time_c2;
     Abc_Ntk_t *pNtk1, *pNtk2, *pCone;
     Abc_Obj_t *pObj;
     FILE *fLog;
@@ -21,19 +22,34 @@ int IcompactMgr::exp_support_icompact_heuristic()
     printf("  heristic%s- %i iteration - on each PO\n", (fSupport)?" - support given ": " ", fIter);
     resetWorkingLitPi();
     resetWorkingLitPo();
+    _step_time = Abc_Clock();
     minMaskList1 = icompact_heuristic_each(fIter, 0, fSupport);
     if(minMaskList1 == NULL) { _fMgr = ICOMPACT_FAIL; return 0; }
+    _end_time = Abc_Clock();
+    time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+
+    _step_time = Abc_Clock();
     pNtk1 = constructNtk(minMaskList1);
     if(pNtk1 == NULL) { return 0; }
+    _end_time = Abc_Clock();
+    time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    
 
     fSupport = 1;
     printf("  heristic%s- %i iteration - on each PO\n", (fSupport)?" - support given ": " ", fIter);
     resetWorkingLitPi();
     resetWorkingLitPo();
+    _step_time = Abc_Clock();
     minMaskList2 = icompact_heuristic_each(fIter, 0, fSupport);
     if(minMaskList2 == NULL) { _fMgr = ICOMPACT_FAIL; return 0; }
+    _end_time = Abc_Clock();
+    time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+
+    _step_time = Abc_Clock();
     pNtk2 = constructNtk(minMaskList2);
     if(pNtk2 == NULL) { return 0; }
+    _end_time = Abc_Clock();
+    time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     // start log
     printf("[Info] Compare constructed circuit w/ original circuit\n");
@@ -42,6 +58,10 @@ int IcompactMgr::exp_support_icompact_heuristic()
     fprintf(fLog, "\nbenchmark, nPattern, uniquePattern, portion(%%)\n");
     fprintf(fLog, "%s, %i, %i, %f\n", _funcFileName, _oriPatCount, _uniquePatCount, 100*_uniquePatCount/pow(2, _nPi));
     
+    fprintf(fLog, "Timing (s), icompact, construct ntk\n");
+    fprintf(fLog, "w/o support, %f, %f\n", time_h1, time_c1);
+    fprintf(fLog, "w/  support, %f, %f\n", time_h2, time_c2);
+
     fprintf(fLog, "Overall circuit size(aig gate count)\n");
     fprintf(fLog, " original, %i\n w/o support, %i\n w/ support, %i", Abc_NtkNodeNum(_pNtk_func), Abc_NtkNodeNum(pNtk1), Abc_NtkNodeNum(pNtk2));
 
