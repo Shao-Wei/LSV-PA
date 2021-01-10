@@ -732,11 +732,13 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
             pNtkTmp = Io_ReadPla(_tmpFileName, 0, 0, 0, 0, 1);
             pNtkTmp = Abc_NtkToLogic(pNtkTmp);
             pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
+            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);
             assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
         }
     }
+    pNtk = ntkMinimize(pNtk, 1, 0);
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     if(ntkVerifySamples(pNtk, _samplesplaFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }

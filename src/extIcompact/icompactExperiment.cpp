@@ -39,7 +39,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     printf("[Info] Compare constructed circuit w/ original circuit\n");
     fLog = fopen(_resultlogFileName, "a");
 
-    fprintf(fLog, "benchmark, nPattern, uniquePattern, portion(%%)\n");
+    fprintf(fLog, "\nbenchmark, nPattern, uniquePattern, portion(%%)\n");
     fprintf(fLog, "%s, %i, %i, %f\n", _funcFileName, _oriPatCount, _uniquePatCount, 100*_uniquePatCount/pow(2, _nPi));
     
     fprintf(fLog, "Overall circuit size(aig gate count)\n");

@@ -21,7 +21,7 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// experiments
+// ntk minimization added to ntk construction
 
 ///////////////////////////
 // Todo
