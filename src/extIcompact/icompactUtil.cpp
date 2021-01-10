@@ -70,48 +70,133 @@ int check_pla_pipo(char *pFileName, int nPi, int nPo)
     return 0;
 }
 
-void aux_orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo)
+// returns 1 if all sim pat are correct, 0 otherwise, -1 if failed
+int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
 {
-    Vec_Ptr_t * vPis, * vPos;
-    Abc_Obj_t * pObj;
-    int i;
-    char s[1024];
+    int result;
+    int nPi_file, nPo_file, nPi_ntk, nPo_ntk;
 
-    // temporarily store the names in the copy field
-    Abc_NtkForEachPi( pNtk, pObj, i )
-        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
-    Abc_NtkForEachPo( pNtk, pObj, i )
-        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
-
-    vPis = Vec_PtrAlloc(0);
-    vPos = Vec_PtrAlloc(0);
-    for (i=0; i<nPi; i++)
+    // checkings
+    assert(pNtk != NULL);
+    Abc_Ntk_t *pNtkFile = Io_Read(pFile, Io_ReadFileType(pFile), 1, 0);
+    if(pNtk == NULL)
     {
-        sprintf(s, "i%i", i);
-        pObj = Abc_NtkFindCi( pNtk, s );
-        if(pObj == NULL)
-        {
-            pObj = Abc_NtkCreatePi(pNtk);
-            Abc_ObjAssignName(pObj, s, NULL);
-        }
-        Vec_PtrPush( vPis, pObj );
+        printf("Verify circuit: Bad input file %s.\n", pFile);
+        return -1;
     }
-    for (i=0; i<nPo; i++)
+    nPi_file = Abc_NtkPiNum(pNtkFile);
+    nPo_file = Abc_NtkPoNum(pNtkFile);
+    nPi_ntk = Abc_NtkPiNum(pNtk);
+    nPo_ntk = Abc_NtkPoNum(pNtk);
+    if(nPi_file != nPi_ntk || nPo_file != nPo_ntk)
     {
-        sprintf(s, "o%i", i);
-        pObj = Abc_NtkFindCo( pNtk, s );
-        Vec_PtrPush( vPos, pObj );
+        printf("Verify circuit: Inconsistent pi/po.\n");
+        return -1;
     }
-    pNtk->vPis = vPis;
-    pNtk->vPos = vPos;
 
-    Abc_NtkOrderCisCos( pNtk );
-    // clean the copy fields
-    Abc_NtkForEachPi( pNtk, pObj, i )
-        pObj->pCopy = NULL;
-    Abc_NtkForEachPo( pNtk, pObj, i )
-        pObj->pCopy = NULL;
+    // verify
+    if(!fVerbose)
+        result = smlVerifyCombGiven(pNtk, pFile, NULL);
+    else
+    {
+        int * pCount = new int[nPo_file]();
+        result = smlVerifyCombGiven(pNtk, pFile, pCount);
+        printf("correct pat num for each po:\n  ");
+        for(int i=0; i<nPo_file; i++)
+            printf(" %i", pCount[i]);
+        printf("\n");
+
+        delete [] pCount;
+    }
+    
+    return result;
 }
 
+// modified from base/abc/abcCheck.c Abc_NtkComparePis()
+int ntkComparePis( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2, int fComb )
+{
+    Abc_Obj_t * pObj1;
+    int i;
+    if ( Abc_NtkPiNum(pNtk1) != Abc_NtkPiNum(pNtk2) )
+    {
+        // printf( "Networks have different number of primary inputs.\n" );
+        return 0;
+    }
+    // for each PI of pNet1 find corresponding PI of pNet2 and reorder them
+    Abc_NtkForEachPi( pNtk1, pObj1, i )
+    {
+        if ( strcmp( Abc_ObjName(pObj1), Abc_ObjName(Abc_NtkPi(pNtk2,i)) ) != 0 )
+        {
+            printf( "Primary input #%d is different in network 1 ( \"%s\") and in network 2 (\"%s\").\n", 
+                i, Abc_ObjName(pObj1), Abc_ObjName(Abc_NtkPi(pNtk2,i)) );
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// modified from base/abc/abcCheck.c Abc_NtkCompareSignals()
+int ntkCompareSignals( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2, int fComb )
+{
+    Abc_NtkOrderObjsByName( pNtk1, fComb );
+    Abc_NtkOrderObjsByName( pNtk2, fComb );
+    if ( !ntkComparePis( pNtk1, pNtk2, fComb ) )
+        return 0;
+    return 1;
+}
+
+// modified from base/abci/abcStrash.c Abc_NtkAppend()
+// fAllPos set to 1 ( = 0 causes unresolved error ). Warnings in Abc_NtkCompareSignals() removed.
+int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2)
+{
+    Abc_Obj_t * pObj;
+    char * pName;
+    int i, nNewCis;
+    // the first network should be an AIG
+    assert( Abc_NtkIsStrash(pNtk1) );
+    assert( Abc_NtkIsStrash(pNtk2) ); 
+    if ( Abc_NtkIsLogic(pNtk2) && !Abc_NtkToAig(pNtk2) )
+    {
+        printf( "Converting to AIGs has failed.\n" );
+        return 0;
+    }
+    // check that the networks have the same PIs
+    // reorder PIs of pNtk2 according to pNtk1
+    ntkCompareSignals( pNtk1, pNtk2, 1 );
+
+    // perform strashing
+    nNewCis = 0;
+    Abc_NtkCleanCopy( pNtk2 );
+    if ( Abc_NtkIsStrash(pNtk2) )
+        Abc_AigConst1(pNtk2)->pCopy = Abc_AigConst1(pNtk1);
+    Abc_NtkForEachCi( pNtk2, pObj, i )
+    {
+        pName = Abc_ObjName(pObj);
+        pObj->pCopy = Abc_NtkFindCi(pNtk1, Abc_ObjName(pObj));
+        if ( pObj->pCopy == NULL )
+        {
+            pObj->pCopy = Abc_NtkDupObj(pNtk1, pObj, 1);
+            nNewCis++;
+        }
+    }
+    if ( nNewCis )
+        printf( "Warning: Procedure Abc_NtkAppend() added %d new CIs.\n", nNewCis );
+    
+    Abc_NtkForEachNode( pNtk2, pObj, i )
+        pObj->pCopy = Abc_AigAnd( (Abc_Aig_t *)pNtk1->pManFunc, Abc_ObjChild0Copy(pObj), Abc_ObjChild1Copy(pObj) );
+    Abc_NtkForEachPo( pNtk2, pObj, i )
+    {
+        Abc_NtkDupObj( pNtk1, pObj, 0 );
+        Abc_ObjAddFanin( pObj->pCopy, Abc_ObjChild0Copy(pObj) );
+        Abc_ObjAssignName( pObj->pCopy, Abc_ObjName(pObj), NULL );
+    }
+    // make sure that everything is okay
+    if ( !Abc_NtkCheck( pNtk1 ) )
+    {
+        printf( "Abc_NtkAppend: The network check has failed.\n" );
+        return 0;
+    }
+    return 1;
+}
 
 ABC_NAMESPACE_IMPL_END

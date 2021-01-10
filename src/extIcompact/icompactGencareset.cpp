@@ -40,7 +40,7 @@ int smlWriteGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, char* pfilen
     return 0;
 }
 
-int smlCompareGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
+int smlCompareGolden_all( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
 {
     int k, i;
     char goldenBit;
@@ -61,6 +61,33 @@ int smlCompareGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
                 fCorrect = 0;
                 break;
             } 
+        }
+        if(fCorrect) { correctCount++; }
+    }
+
+    return correctCount;
+}
+
+int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int * pCount)
+{
+    int k, i;
+    char goldenBit;
+    Aig_Obj_t * pObj;
+    
+    Aig_Man_t * pAig = p->pAig;
+    bool fCorrect;
+    int correctCount = 0;
+
+    for(k=0; k<nPart; k++)
+    {
+        fCorrect = 1;
+        Aig_ManForEachCo(pAig, pObj, i)
+        {
+            goldenBit = Vec_StrEntry(vSimInfo, (k+1)*Aig_ManCiNum(pAig)+ k*Aig_ManCoNum(pAig) + i);
+            if(Abc_InfoHasBit(Fra_ObjSim( p, pObj->Id ), k) != goldenBit) 
+                fCorrect = 0;
+            else
+                pCount[i] = pCount[i] + 1;   
         }
         if(fCorrect) { correctCount++; }
     }
@@ -200,7 +227,7 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
-int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
+int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName, int * pCount)
 {
     Vec_Str_t * vSimInfo, * vSimPart;
     Fra_Sml_t * p = NULL;
@@ -241,7 +268,8 @@ int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
         // start simulation
         smlInitializeGiven( p, vSimPart );
         Fra_SmlSimulateOne( p );
-        correctCount = smlCompareGolden(p, vSimPart, nPart);
+        correctCount = (pCount == NULL)? smlCompareGolden_all(p, vSimPart, nPart):
+                                         smlCompareGolden_each(p, vSimPart, nPart, pCount);
         totalCount += correctCount;
 
         Vec_StrFree( vSimPart );

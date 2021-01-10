@@ -143,7 +143,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
         _pNtk_core = constructNtk(minMaskList);
-        if(!ntkVerifySamples(_pNtk_core)) { _fMgr = NTK_FAIL_SIMULATION; return 0; }
+        if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
     {
@@ -388,6 +388,55 @@ bool IcompactMgr::singleSupportComplement(int piIdx, int poIdx)
     fclose(fpattern);
     return (iBit != oBit);
 }
+
+void IcompactMgr::orderPiPo(Abc_Ntk_t * pNtk)
+{
+    Vec_Ptr_t * vPis, * vPos;
+    Abc_Obj_t * pObj;
+    int i;
+
+    int nPi = Abc_NtkPiNum(pNtk);
+    int nPo = Abc_NtkPoNum(pNtk);
+
+    // temporarily store the names in the copy field
+    Abc_NtkForEachPi( pNtk, pObj, i )
+        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
+    Abc_NtkForEachPo( pNtk, pObj, i )
+        pObj->pCopy = (Abc_Obj_t *)Abc_ObjName(pObj);
+
+    vPis = Vec_PtrAlloc(0);
+    vPos = Vec_PtrAlloc(0);
+    for (i=0; i<nPi; i++)
+    {
+        pObj = Abc_NtkFindCi(pNtk,_piNames[i]);
+        if(pObj == NULL)
+        {
+            pObj = Abc_NtkCreatePi(pNtk);
+            Abc_ObjAssignName(pObj, _piNames[i], NULL);
+        }
+        Vec_PtrPush( vPis, pObj );
+    }
+    for (i=0; i<nPo; i++)
+    {
+        pObj = Abc_NtkFindCo( pNtk,_poNames[i]);
+        if(pObj == NULL)
+        {
+            pObj = Abc_NtkCreatePo(pNtk);
+            Abc_ObjAssignName(pObj, _poNames[i], NULL);
+        }
+        Vec_PtrPush( vPos, pObj );
+    }
+    pNtk->vPis = vPis;
+    pNtk->vPos = vPos;
+
+    Abc_NtkOrderCisCos( pNtk );
+    // clean the copy fields
+    Abc_NtkForEachPi( pNtk, pObj, i )
+        pObj->pCopy = NULL;
+    Abc_NtkForEachPo( pNtk, pObj, i )
+        pObj->pCopy = NULL;
+}
+
 /////////////////////////////////////////////////////////
 // Support Set
 /////////////////////////////////////////////////////////
@@ -655,7 +704,7 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
         pPi = Abc_NtkCreatePi(pNtk);
         Abc_ObjAssignName(pPi, _piNames[i], NULL);
     }
-        
+
     // each po function
     vector<int> fanInList;
     for(int poIdx=0; poIdx<_nPo; poIdx++)
@@ -664,11 +713,7 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
         for(int piIdx=0; piIdx<_nPi; piIdx++)
             if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
         
-        // printf("Po %i\n", poIdx);
-        // for(int i=0, n=fanInList.size(); i<n; i++) { printf(" %s", _poNames[fanInList[i]]); }
-        // printf("\n");
-
-        if(fanInList.size() == 1) // constant node. check heuristic, it may return 0 instead of 1 !!
+        if(fanInList.size() == 1)
         {
             pPo = Abc_NtkCreatePo(pNtk);
             Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
@@ -687,24 +732,15 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
             pNtkTmp = Io_ReadPla(_tmpFileName, 0, 0, 0, 0, 1);
             pNtkTmp = Abc_NtkToLogic(pNtkTmp);
             pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
-            if(!Abc_NtkAppend(pNtk, pNtkTmp, 1)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+            assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
+            if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
+            Abc_NtkDelete(pNtkTmp);
         }
     }
-    if (!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+    orderPiPo(pNtk);
+    if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+    if(ntkVerifySamples(pNtk, _samplesplaFileName,1) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
     return pNtk;
-}
-
-/////////////////////////////////////////////////////////
-// Verify
-/////////////////////////////////////////////////////////
-
-// verify ntk w/ samples.pla
-int IcompactMgr::ntkVerifySamples(Abc_Ntk_t* pNtk)
-{
-    int result;
-    result = smlVerifyCombGiven(pNtk, _samplesplaFileName);
-
-    return result;
 }
 
 /////////////////////////////////////////////////////////

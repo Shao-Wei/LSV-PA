@@ -22,11 +22,11 @@ ABC_NAMESPACE_HEADER_START
 // Commit log
 ///////////////////////////
 // construct circuit for heuristic each
+// add ntk verify by simulation
 
 ///////////////////////////
 // Todo
 ///////////////////////////
-// (icompactGencareset) simulation accuracy report
 // construct circuit rm warning + bug fix
 
 // (icompactGencareset) n_gen_Random checkpattern removal
@@ -36,7 +36,6 @@ ABC_NAMESPACE_HEADER_START
 // reencode methods should return -1 when fail
 // handle constant po where compaction result returns 0
 // icompact heuristic scheme add
-// * construct over all circuit 
 // check unvalid char when reading pla 
 
 
@@ -165,6 +164,7 @@ private:
     bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
     void getInfoFromSamples();
     bool singleSupportComplement(int piIdx, int poIdx); // see if po is complemented thru samples file
+    void orderPiPo(Abc_Ntk_t * pNtk);
 
     // ntk functions
     Abc_Ntk_t * getNtk_func();
@@ -174,9 +174,6 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     Abc_Ntk_t * constructNtk(bool **minMaskList);
-
-    // verify
-    int ntkVerifySamples(Abc_Ntk_t* pNtk);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);
@@ -194,7 +191,7 @@ extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int 
 
 // icompactGencareset.cpp
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
-int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName);
+int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName, int * pCount);
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
 void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
 void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
@@ -203,6 +200,9 @@ void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
 // icompactUtil.cpp
 extern int espresso_input_count(char* filename);
 extern int check_pla_pipo(char *pFileName, int nPi, int nPo);
+void orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo);
+int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
+int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
 
 ABC_NAMESPACE_HEADER_END
 #endif
