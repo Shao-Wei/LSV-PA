@@ -75,6 +75,7 @@ public:
 
     // experiments
     int exp_support_icompact_heuristic();
+    int exp_support_icompact_heuristic_mfs();
     
     // main functions
     int ocompact(int fOutput, int fNewVar);
@@ -172,9 +173,10 @@ private:
     Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
+    Abc_Ntk_t * ntkMfs(Abc_Ntk_t * pNtk);
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtk(bool **minMaskList);
+    Abc_Ntk_t * constructNtk(bool **minMaskList, int fMfs);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);

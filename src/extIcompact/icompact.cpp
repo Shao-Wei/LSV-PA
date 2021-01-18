@@ -29,6 +29,22 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     _fOcompact = 0;
     _fSupportFunc = 0;
     _fSupportPatt = 0;
+    // set others to NULL
+    _litPi = NULL;
+    _litPo = NULL;
+    _litRPi = NULL;
+    _litRPo = NULL;
+    _piNames = NULL;
+    _poNames = NULL;
+    _rpiNames = NULL;
+    _rpoNames = NULL;
+    _supportInfo_func = NULL;
+    _supportInfo_patt = NULL;
+    _pNtk_samples = NULL;
+    _pNtk_careset = NULL;
+    _pNtk_imap    = NULL;
+    _pNtk_core    = NULL;
+    _pNtk_omap    = NULL;
     // set file names
     sprintf(_samplesplaFileName,      "%s.samples.pla",   baseFileName);
     sprintf(_reducedplaFileName,      "%s.reduced.pla",   baseFileName);
@@ -39,20 +55,7 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
     sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
     sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
-    // set others to NULL
-    _pNtk_samples = NULL;
-    _pNtk_careset = NULL;
-    _pNtk_imap    = NULL;
-    _pNtk_core    = NULL;
-    _pNtk_omap    = NULL;
-    
-    _supportInfo_func = NULL;
-    _supportInfo_patt = NULL;
-
-    _piNames = NULL;
-    _poNames = NULL;
-    _rpiNames = NULL;
-    _rpoNames = NULL;
+   
     ///////////////////////////////////////////////////
     // set basics
     getInfoFromSamples();
@@ -69,7 +72,55 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
 
 IcompactMgr::~IcompactMgr()
 {
-
+/*    
+    if(_litPi != NULL) { delete [] _litPi; }
+    if(_litPo != NULL) { delete [] _litPo; }
+    if(_litRPi != NULL) { delete [] _litRPi; }
+    if(_litRPo != NULL) { delete [] _litRPo; }
+    if(_piNames != NULL)
+    {
+        for(int i=0; i<_nPi; i++)
+            delete [] _piNames[i];
+        delete [] _piNames;
+    }
+    if(_poNames != NULL)
+    {
+        for(int i=0; i<_nPo; i++)
+            delete [] _poNames[i];
+        delete [] _poNames;
+    }
+    if(_rpiNames != NULL)
+    {
+        for(int i=0; i<_nRPi; i++)
+            delete [] _rpiNames[i];
+        delete [] _rpiNames;
+    }
+    if(_rpoNames != NULL)
+    {
+        for(int i=0; i<_nRPo; i++)
+            delete [] _rpoNames[i];
+        delete [] _rpoNames;
+    }
+    
+    if(_supportInfo_func != NULL)
+    {
+        for(int i=0; i<_nPi; i++)
+            delete [] _supportInfo_func[i];
+        delete [] _supportInfo_func;
+    }
+    if(_supportInfo_patt != NULL)
+    {
+        for(int i=0; i<_nPi; i++)
+            delete [] _supportInfo_patt[i];
+        delete [] _supportInfo_patt;
+    }
+    if(_pNtk_func != NULL)    { Abc_NtkDelete(_pNtk_func); }
+    if(_pNtk_careset != NULL) { Abc_NtkDelete(_pNtk_careset); }
+    if(_pNtk_samples != NULL) { Abc_NtkDelete(_pNtk_samples); }
+    if(_pNtk_imap != NULL)    { Abc_NtkDelete(_pNtk_imap); }
+    if(_pNtk_core != NULL)    { Abc_NtkDelete(_pNtk_core); }
+    if(_pNtk_omap != NULL)    { Abc_NtkDelete(_pNtk_omap); }
+*/
 }
 
 // returns _nRPo. fOutput = 1 naive, = 0 reencode
@@ -142,7 +193,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtk(minMaskList);
+        _pNtk_core = constructNtk(minMaskList, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -573,6 +624,7 @@ Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fColla
                                   resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
                                   resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
                                   refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
+    
     Abc_FrameReplaceCurrentNetwork(_pAbc, pNtk);
     if(fMinimize == STRONG)
     {
@@ -589,6 +641,22 @@ Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fColla
         if(Cmd_CommandExecute(_pAbc,minimizeCommand))
             return NULL;
     }
+    pNtk = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
+    return pNtk;
+}
+
+Abc_Ntk_t * IcompactMgr::ntkMfs(Abc_Ntk_t * pNtk)
+{
+    char mfsCommand[500] = "mfs –W 4 –M 5000; strash";
+
+    // set external care
+    Abc_Ntk_t* pNtkTmp = Abc_NtkDup(pNtk);
+    pNtk->pExcare = pNtkTmp;
+    pNtk = Abc_NtkToLogic(pNtk);
+
+    Abc_FrameReplaceCurrentNetwork(_pAbc, pNtk);
+    if(Cmd_CommandExecute(_pAbc,mfsCommand))
+        return NULL;
     pNtk = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
     return pNtk;
 }
@@ -692,7 +760,7 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
+Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList, int fMfs)
 {
     Abc_Ntk_t *pNtk, *pNtkTmp;
     Abc_Obj_t *pPi, *pPo;
@@ -733,12 +801,16 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList)
             pNtkTmp = Abc_NtkToLogic(pNtkTmp);
             pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
             pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);
+            if(fMfs)
+                pNtkTmp = ntkMfs(pNtkTmp);
             assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
         }
     }
     pNtk = ntkMinimize(pNtk, 1, 0);
+    if(fMfs)
+        pNtk = ntkMfs(pNtk);
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     if(ntkVerifySamples(pNtk, _samplesplaFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }

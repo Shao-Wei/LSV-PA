@@ -1,0 +1,17 @@
+
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 3000, 3000, 0.017881
+Timing (s), icompact, construct ntk
+w/ support    , 0.000000, 6.587042
+w/ support mfs, 2.017991, 13.611594
+Overall circuit size(aig gate count)
+ original, 145
+ w/ support, 3222
+ w/ support mfs, 3078
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 13, 13, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/ support, 0, 0, 0, 0, 0, 0, 59, 4, 4, 6, 796, 773, 808, 1094, 110, 75, 15, 76, 8, 11, 5, 4, 11, 4, 64, 122, 67
+w/ support mfs, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 799, 767, 786, 1100, 110, 78, 15, 71, 10, 8, 5, 6, 10, 4, 10, 25, 16

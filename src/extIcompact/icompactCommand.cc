@@ -213,9 +213,9 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     
     mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
     if(fExperiment == 1)
-    {
         mgr->exp_support_icompact_heuristic();
-    }
+    else if(fExperiment == 2)
+        mgr->exp_support_icompact_heuristic_mfs();
     else
     {
         mgr->ocompact(fOutput, fNewVar);

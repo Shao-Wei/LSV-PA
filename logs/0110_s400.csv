@@ -1,0 +1,86 @@
+
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 3000, 3000, 0.017881
+Timing (s), icompact, construct ntk
+w/o support, 6.619619, 57.664916
+w/  support, 2.228134, 6.437968
+Overall circuit size(aig gate count)
+ original, 145
+ w/o support, 36371
+ w/ support, 3225
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/o support, 1, 1, 1, 1, 1, 1, 15, 18, 18, 17, 17, 18, 18, 15, 17, 17, 14, 16, 16, 5, 4, 16, 6, 5, 18, 16, 17
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 13, 13, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/o support, 0, 0, 0, 0, 0, 0, 1627, 3085, 3098, 5127, 1982, 2470, 2853, 1538, 1404, 2205, 841, 1491, 759, 6, 5, 1648, 6, 4, 1632, 6030, 6692
+w/ support, 0, 0, 0, 0, 0, 0, 59, 4, 4, 6, 794, 770, 781, 1113, 111, 87, 14, 80, 9, 8, 5, 8, 11, 4, 62, 120, 67
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 10000, 8191, 0.048822
+Timing (s), icompact, construct ntk
+w/o support, 20.900225, 70.343558
+w/  support, 7.096097, 11.797878
+Overall circuit size(aig gate count)
+ original, 145
+ w/o support, 45208
+ w/ support, 5666
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/o support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 19, 20, 19, 18, 17, 20, 17, 18, 5, 5, 4, 5, 6, 5, 7, 8, 18
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/o support, 0, 0, 0, 0, 0, 0, 13, 4, 4, 6, 5301, 6601, 5673, 5024, 2411, 5567, 2867, 4116, 12, 6, 5, 5, 6, 4, 11, 131, 14542
+w/ support, 0, 0, 0, 0, 0, 0, 54, 4, 4, 7, 1645, 1750, 1200, 1813, 18, 71, 14, 13, 8, 6, 5, 4, 12, 4, 10, 126, 65
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 30000, 28636, 0.170684
+Timing (s), icompact, construct ntk
+w/o support, 99.050706, 137.431464
+w/  support, 33.240839, 50.807838
+Overall circuit size(aig gate count)
+ original, 145
+ w/o support, 89962
+ w/ support, 8401
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/o support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 20, 20, 20, 20, 10, 20, 20, 21, 5, 5, 4, 5, 6, 5, 7, 8, 8
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/o support, 0, 0, 0, 0, 0, 0, 11, 4, 4, 6, 14304, 15892, 15893, 16702, 34, 12229, 12059, 16047, 8, 6, 5, 5, 6, 4, 11, 126, 97
+w/ support, 0, 0, 0, 0, 0, 0, 11, 4, 4, 5, 2496, 2612, 1386, 2811, 72, 86, 13, 13, 10, 6, 5, 4, 6, 4, 13, 113, 87
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 100000, 98029, 0.584298
+Timing (s), icompact, construct ntk
+w/o support, 628.790876, 553.123034
+w/  support, 156.390194, 553.006891
+Overall circuit size(aig gate count)
+ original, 145
+ w/o support, 8543
+ w/ support, 8543
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/o support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/o support, 0, 0, 0, 0, 0, 0, 11, 4, 4, 5, 2422, 2769, 1407, 2881, 65, 90, 12, 51, 10, 6, 5, 4, 6, 4, 11, 115, 90
+w/ support, 0, 0, 0, 0, 0, 0, 11, 4, 4, 5, 2422, 2769, 1407, 2881, 65, 90, 12, 51, 10, 6, 5, 4, 6, 4, 11, 115, 90
+benchmark, nPattern, uniquePattern, portion(%)
+../../benchmarks/ISCAS/s400.blif, 300000, 296347, 1.766366
+Timing (s), icompact, construct ntk
+w/o support, 2591.558457, 5144.195978
+w/  support, 698.614786, 5146.286552
+Overall circuit size(aig gate count)
+ original, 145
+ w/o support, 8592
+ w/ support, 8592
+Support size on each po
+original, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 14, 14, 10, 10, 10, 10, 5, 5, 5, 5, 6, 5, 7, 8, 8
+w/o support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+w/ support, 1, 1, 1, 1, 1, 1, 7, 3, 3, 6, 14, 14, 13, 14, 10, 10, 9, 10, 5, 5, 4, 5, 6, 5, 7, 8, 8
+Cone size on each po(aig gate count)
+original, 0, 0, 0, 0, 0, 0, 11, 4, 4, 7, 20, 19, 18, 17, 16, 15, 14, 13, 10, 9, 8, 5, 9, 4, 11, 22, 21
+w/o support, 0, 0, 0, 0, 0, 0, 10, 4, 4, 6, 2533, 2774, 1422, 2853, 15, 91, 12, 135, 8, 6, 5, 4, 8, 5, 11, 97, 54
+w/ support, 0, 0, 0, 0, 0, 0, 10, 4, 4, 6, 2533, 2774, 1422, 2853, 15, 91, 12, 135, 8, 6, 5, 4, 8, 5, 11, 97, 54
