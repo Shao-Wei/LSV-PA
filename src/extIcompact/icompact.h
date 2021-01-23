@@ -21,19 +21,21 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// ntk minimization added to ntk construction
+// destructor
+// icompact exp functions collected
 
 ///////////////////////////
 // Todo
 ///////////////////////////
 // (icompactGencareset) n_gen_Random checkpattern removal
-// destructor
 // pi/po names handling after compaction
 // support handling after compaction
 // reencode methods should return -1 when fail
 // icompact heuristic scheme add
 // check unvalid char when reading pla 
 // handle constant po where compaction result returns 0
+// _patternMgr may have wrong working file when used multiple times
+// icompact heuristic does not reset patter between each iter
 
 
 // base/abci/abcStrash.c
@@ -73,11 +75,8 @@ public:
     IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName);
     ~IcompactMgr();
 
-    // experiments
-    int exp_support_icompact_heuristic();
-    int exp_support_icompact_heuristic_mfs();
-    
     // main functions
+    int performExp(int fExperiment);
     int ocompact(int fOutput, int fNewVar);
     int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch, int fIter, int fSupport);
 
@@ -101,6 +100,7 @@ private:
     bool _fEval; // flag set true if _pNtk_func is built for eval
     bool _fSupportFunc, _fSupportPatt; // flag set true after support set is built
     
+    ICompactHeuristicMgr * _patternMgr;
     // basic info
     int _nPi, _nPo;
     char **_piNames, **_poNames; // get from samples file
@@ -187,6 +187,10 @@ private:
     // reencode methods
     int reencode_naive(char* reencodeplaFile, char* mapping);
     int reencode_heuristic(char* reencodeplaFile, char* mapping, bool type, int newVar, int* record);
+
+    // experiments
+    int exp_support_icompact_heuristic();
+    int exp_support_icompact_heuristic_mfs();
 };
 
 // icompactSolve.cpp

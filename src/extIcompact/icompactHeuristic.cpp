@@ -171,6 +171,7 @@ bool ** ICompactHeuristicMgr::compact_drop_each(int iterNum)
         for(int k=0; k<_nPi; k++)
             _eachMinMask[i][k] = minMask[k];
     }
+    reset();
 
     return _eachMinMask;
 }

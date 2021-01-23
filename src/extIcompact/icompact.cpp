@@ -29,6 +29,8 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     _fOcompact = 0;
     _fSupportFunc = 0;
     _fSupportPatt = 0;
+    // managers
+    _patternMgr = NULL;
     // set others to NULL
     _litPi = NULL;
     _litPo = NULL;
@@ -71,36 +73,16 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
 }
 
 IcompactMgr::~IcompactMgr()
-{
-/*    
+{  
+    if(_patternMgr != NULL) { delete _patternMgr; }
     if(_litPi != NULL) { delete [] _litPi; }
     if(_litPo != NULL) { delete [] _litPo; }
     if(_litRPi != NULL) { delete [] _litRPi; }
     if(_litRPo != NULL) { delete [] _litRPo; }
-    if(_piNames != NULL)
-    {
-        for(int i=0; i<_nPi; i++)
-            delete [] _piNames[i];
-        delete [] _piNames;
-    }
-    if(_poNames != NULL)
-    {
-        for(int i=0; i<_nPo; i++)
-            delete [] _poNames[i];
-        delete [] _poNames;
-    }
-    if(_rpiNames != NULL)
-    {
-        for(int i=0; i<_nRPi; i++)
-            delete [] _rpiNames[i];
-        delete [] _rpiNames;
-    }
-    if(_rpoNames != NULL)
-    {
-        for(int i=0; i<_nRPo; i++)
-            delete [] _rpoNames[i];
-        delete [] _rpoNames;
-    }
+    if(_piNames != NULL) { delete [] _piNames; }
+    if(_poNames != NULL) { delete [] _poNames; }
+    if(_rpiNames != NULL) { delete [] _rpiNames; }
+    if(_rpoNames != NULL) { delete [] _rpoNames; }
     
     if(_supportInfo_func != NULL)
     {
@@ -114,13 +96,23 @@ IcompactMgr::~IcompactMgr()
             delete [] _supportInfo_patt[i];
         delete [] _supportInfo_patt;
     }
-    if(_pNtk_func != NULL)    { Abc_NtkDelete(_pNtk_func); }
-    if(_pNtk_careset != NULL) { Abc_NtkDelete(_pNtk_careset); }
-    if(_pNtk_samples != NULL) { Abc_NtkDelete(_pNtk_samples); }
-    if(_pNtk_imap != NULL)    { Abc_NtkDelete(_pNtk_imap); }
-    if(_pNtk_core != NULL)    { Abc_NtkDelete(_pNtk_core); }
-    if(_pNtk_omap != NULL)    { Abc_NtkDelete(_pNtk_omap); }
-*/
+    // may fail because internal marks not handled
+    // if(_pNtk_func != NULL)    { Abc_NtkDelete(_pNtk_careset); }
+    // if(_pNtk_careset != NULL) { Abc_NtkDelete(_pNtk_careset); }
+    // if(_pNtk_samples != NULL) { Abc_NtkDelete(_pNtk_samples); }
+    // if(_pNtk_imap != NULL)    { Abc_NtkDelete(_pNtk_imap); }
+    // if(_pNtk_core != NULL)    { Abc_NtkDelete(_pNtk_core); }
+    // if(_pNtk_omap != NULL)    { Abc_NtkDelete(_pNtk_omap); }
+}
+
+int IcompactMgr::performExp(int fExperiment)
+{
+    if(fExperiment == 1)
+        exp_support_icompact_heuristic();
+    else if(fExperiment == 2)
+        exp_support_icompact_heuristic_mfs();
+
+    return 0;
 }
 
 // returns _nRPo. fOutput = 1 naive, = 0 reencode
@@ -950,13 +942,14 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
 
     bool * minMask;
     
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName, 1);
-    _oriPatCount = mgr->getOriPatCount();
-    _uniquePatCount = mgr->getUniPatCount();
-    mgr->lockEntry(fRatio);
+    if(_patternMgr == NULL)
+        _patternMgr = new ICompactHeuristicMgr(_workingFileName, 1);
+    _oriPatCount = _patternMgr->getOriPatCount();
+    _uniquePatCount = _patternMgr->getUniPatCount();
+    _patternMgr->lockEntry(fRatio);
     if(fSupport)
-        mgr->supportInfo(_supportInfo_func);
-    minMask = mgr->compact_drop(iterNum, 1);
+        _patternMgr->supportInfo(_supportInfo_func);
+    minMask = _patternMgr->compact_drop(iterNum, 1);
     if(minMask == NULL) { return -1; }
     
     // report
@@ -990,17 +983,16 @@ bool ** IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSu
     }
     if(mgrStatus()) { return NULL; }
 
-    ICompactHeuristicMgr* mgr = new ICompactHeuristicMgr(_workingFileName, 1);
-    _oriPatCount = mgr->getOriPatCount();
-    _uniquePatCount = mgr->getUniPatCount();
-    mgr->lockEntry(fRatio);
+    if(_patternMgr == NULL)
+        _patternMgr = new ICompactHeuristicMgr(_workingFileName, 1);
+    _oriPatCount = _patternMgr->getOriPatCount();
+    _uniquePatCount = _patternMgr->getUniPatCount();
+    _patternMgr->lockEntry(fRatio);
     if(fSupport)
-        mgr->supportInfo(_supportInfo_func);
-    minMaskList = mgr->compact_drop_each(iterNum);
+        _patternMgr->supportInfo(_supportInfo_func);
+    minMaskList = _patternMgr->compact_drop_each(iterNum);
     if(minMaskList == NULL) { return NULL; }
     
-    // report specially handled
-
     return minMaskList;
 }
 
