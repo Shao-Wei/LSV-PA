@@ -199,4 +199,32 @@ int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2)
     return 1;
 }
 
+char ** setDummyNames(int len, char * baseStr)
+{
+    char ** result = new char*[len];
+    for(int i=0; i<len; i++)
+    {
+        char * buffer = new char[64]();
+        sprintf(buffer, "%s%i", baseStr, i);
+        result[i] = buffer;
+    }
+    return result;
+}
+
+bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
+{
+    char iBit, oBit;
+    char buff[102400];
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    FILE* fpattern = fopen(pFileName, "r");
+    for(int i=0; i<6; i++) // get first pattern
+        unused = fgets(buff, 102400, fpattern);
+    
+    iBit = buff[piIdx];
+    oBit = buff[poIdx];
+
+    fclose(fpattern);
+    return (iBit != oBit);
+}
+
 ABC_NAMESPACE_IMPL_END

@@ -21,8 +21,7 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// destructor
-// icompact exp functions collected
+// ocompact circuit construction
 
 ///////////////////////////
 // Todo
@@ -36,7 +35,8 @@ ABC_NAMESPACE_HEADER_START
 // handle constant po where compaction result returns 0
 // _patternMgr may have wrong working file when used multiple times
 // icompact heuristic does not reset patter between each iter
-
+// ocompact heuristic may have '-' in encoding, which is not valid for icompact pla format
+// ocompact heuristic use po signals with small supports
 
 // base/abci/abcStrash.c
 extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
@@ -101,13 +101,19 @@ private:
     bool _fSupportFunc, _fSupportPatt; // flag set true after support set is built
     
     ICompactHeuristicMgr * _patternMgr;
+
+    // working
+    char _workingFileName[500];
+    bool *_litWorkingPi, *_litWorkingPo;
+    int _workingPi, _workingPo; 
+
     // basic info
     int _nPi, _nPo;
     char **_piNames, **_poNames; // get from samples file
     bool *_litPi, *_litPo;
     int _nRPi, _nRPo; // Output Compaction & Input Reencoding results
-    bool *_litRPi, *_litRPo;
     char **_rpiNames, **_rpoNames;
+    bool *_litRPi, *_litRPo;
     int _oriPatCount, _uniquePatCount;
 
     // timing
@@ -128,7 +134,7 @@ private:
     char* _tmpFileName = "tmp.pla";
 
     // intermediate files
-    char _workingFileName[500];
+    
     char _samplesplaFileName[500]; // samples of simulation
     char _reducedplaFileName[500]; // redundent inputs removed
     char _outputreencodedFileName[500];
@@ -160,12 +166,7 @@ private:
     void resetWorkingLitPo();
     bool validWorkingLitPi(); 
     bool validWorkingLitPo();
-    int getWorkingPiNum() { return (_fIcompact)? _nRPi: _nPi; }
-    int getWorkingPoNum() { return (_fOcompact)? _nRPo: _nPo; }
-    bool * getWorkingLitPi() { return (_fIcompact)? _litRPi: _litPi; }
-    bool * getWorkingLitPo() { return (_fOcompact)? _litRPo: _litPo; }
     void getInfoFromSamples();
-    bool singleSupportComplement(int piIdx, int poIdx); // see if po is complemented thru samples file
     void orderPiPo(Abc_Ntk_t * pNtk);
 
     // ntk functions
@@ -178,7 +179,8 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtk(bool **minMaskList, int fMfs);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs);
+    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);
@@ -193,6 +195,7 @@ private:
     // experiments
     int exp_support_icompact_heuristic();
     int exp_support_icompact_heuristic_mfs();
+    int exp_omap_construction();
 };
 
 // icompactSolve.cpp
@@ -212,6 +215,8 @@ extern int check_pla_pipo(char *pFileName, int nPi, int nPo);
 void orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo);
 int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
 int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
+char ** setDummyNames(int len, char * baseStr);
+bool singleSupportComplement(char * pFileName, int piIdx, int poIdx); // check if two bits are complement
 
 ABC_NAMESPACE_HEADER_END
 #endif

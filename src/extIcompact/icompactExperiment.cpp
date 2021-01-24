@@ -18,6 +18,12 @@ int IcompactMgr::exp_support_icompact_heuristic()
     FILE *fLog;
     int count;
 
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+
     fSupport = 0;
     printf("  heristic%s- %i iteration - on each PO\n", (fSupport)?" - support given ": " ", fIter);
     resetWorkingLitPi();
@@ -29,7 +35,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtk(minMaskList1, 0);
+    pNtk1 = constructNtkEach(minMaskList1, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -46,7 +52,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtk(minMaskList2, 0);
+    pNtk2 = constructNtkEach(minMaskList2, 0);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -141,6 +147,12 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     FILE *fLog;
     int count; 
 
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+
     fSupport = 1;
     printf("  heristic%s- %i iteration - on each PO\n", (fSupport)?" - support given ": " ", fIter);
     resetWorkingLitPi();
@@ -152,13 +164,13 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtk(minMaskList, 0);
+    pNtk1 = constructNtkEach(minMaskList, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtk(minMaskList, 1);
+    pNtk2 = constructNtkEach(minMaskList, 1);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -229,4 +241,71 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     return 0;
 }
 
+int IcompactMgr::exp_omap_construction()
+{
+    printf("[Info] Experiment: output compaction mapping circuit construction\n");
+    if(_resultlogFileName == NULL) { printf("No log file. Abort.\n"); }
+
+    double time_h1, time_h2, time_c1, time_c2;
+    Abc_Ntk_t *pNtk1, *pNtk2;
+    FILE *fLog;
+
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+
+    printf("  naive binary encoded\n");
+_step_time = Abc_Clock();
+    _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
+_end_time = Abc_Clock();
+time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    _rpoNames = setDummyNames(_nRPo, "reO_");
+    _litRPo = new bool[_nRPo];
+_step_time = Abc_Clock();
+    pNtk1 = constructNtkOmap(NULL, 0);
+_end_time = Abc_Clock();
+time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+
+    printf("  reencode - circuit breaks down into two\n");
+    int * recordPo = new int[_nPo];
+_step_time = Abc_Clock();
+    _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, 4, recordPo);
+_end_time = Abc_Clock();
+time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    _rpoNames = setDummyNames(_nRPo, "reO_");
+    _litRPo = new bool[_nRPo];
+_step_time = Abc_Clock();
+    pNtk2 = constructNtkOmap(recordPo, 0);
+_end_time = Abc_Clock();
+time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+
+    // start log
+    printf("[Info] Compare constructed circuit\n");
+    fLog = fopen(_resultlogFileName, "a");
+
+    fprintf(fLog, "\nbenchmark, nPattern, uniquePattern, portion(%%)\n");
+    fprintf(fLog, "%s\n", _funcFileName);
+    
+    fprintf(fLog, "Timing (s), ocompact, construct ntk\n");
+    fprintf(fLog, "w/ naive    , %f, %f\n", time_h1, time_c1);
+    fprintf(fLog, "w/ reencode , %f, %f\n", time_h2, time_c2);
+
+    fprintf(fLog, "Overall circuit size(aig gate count)\n");
+    fprintf(fLog, " original, %i\n w/ naive, %i\n w/ reencode, %i", Abc_NtkNodeNum(_pNtk_func), Abc_NtkNodeNum(pNtk1), Abc_NtkNodeNum(pNtk2));
+
+    // clean up
+    fclose(fLog);
+    Abc_NtkDelete(pNtk1);
+    Abc_NtkDelete(pNtk2);
+
+    return 0;
+}
 ABC_NAMESPACE_IMPL_END

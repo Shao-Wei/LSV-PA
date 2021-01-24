@@ -67,7 +67,6 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
         _litPo = new bool[_nPo];
         _nRPi = _nPi; // _litRPi built later
         _nRPo = _nPo; // _litRPo built later
-        strncpy(_workingFileName, _samplesplaFileName, 500);    
     }
     _pNtk_func = getNtk_func();
 }
@@ -111,6 +110,8 @@ int IcompactMgr::performExp(int fExperiment)
         exp_support_icompact_heuristic();
     else if(fExperiment == 2)
         exp_support_icompact_heuristic_mfs();
+    else if(fExperiment == 3)
+        exp_omap_construction();
 
     return 0;
 }
@@ -123,20 +124,28 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
     if(_fOcompact) { return 0; }
     if(fOutput == 0) { return _nPo; }
 
-    int * recordPo = new int[_nPo]; // used in reencode_heuristic, see later
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
     
     _step_time = Abc_Clock();
     if(fOutput == 1)
     {
         printf("  naive binary encoded\n");
         _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
-    }
-        
+        _pNtk_omap = constructNtkOmap(NULL, 1);
+    }   
     else
     {
         printf("  reencode - circuit breaks down into two\n");
+        int * recordPo = new int[_nPo];
         _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
-    
+        _rpoNames = setDummyNames(_nRPo, "reO_");
+        _litRPo = new bool[_nRPo];
+        _pNtk_omap = constructNtkOmap(recordPo, 1);
+        delete [] recordPo;
     }
     _end_time = Abc_Clock();
 
@@ -150,7 +159,6 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
     _litRPo = new bool[_nRPo];
 
     // cleanup
-    delete [] recordPo;
     return _nRPo;
 }
 
@@ -160,8 +168,25 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     if(mgrStatus()) { return -1; }
     if(_fIcompact) { return 0; }
 
+    if(!_fOcompact)
+    {
+        strncpy(_workingFileName, _samplesplaFileName, 500);
+        _litWorkingPi = _litPi;
+        _litWorkingPo = _litPo;
+        _workingPi = _nPi;
+        _workingPo = _nPo;
+    }
+    else
+    {
+        strncpy(_workingFileName, _outputreencodedFileName, 500);
+        _litWorkingPi = _litPi;
+        _litWorkingPo = _litRPo;
+        _workingPi = _nPi;
+        _workingPo = _nRPo;
+    }
+
     int result = 0;
-    assert(!check_pla_pipo(_workingFileName, getWorkingPiNum(), getWorkingPoNum()));
+    assert(!check_pla_pipo(_workingFileName, _workingPi, _workingPo));
 
     if(fSolving == HEURISTIC)
     {
@@ -185,7 +210,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtk(minMaskList, 1);
+        _pNtk_core = constructNtkEach(minMaskList, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -230,8 +255,8 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
     
     if(result != -1 && fSolving != REENCODE && fSolving != HEURISTIC_EACH)
     {
-        int nPi = getWorkingPiNum();
-        bool * litPi = getWorkingLitPi();
+        int nPi = _workingPi;
+        bool * litPi = _litWorkingPi;
         _time_icompact = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
         printf("icompact computation time: %9.2f\n", _time_icompact);
         printf("icompact result: %i / %i\n", result, nPi);
@@ -339,43 +364,23 @@ bool IcompactMgr::mgrStatus()
 // all set to zero
 void IcompactMgr::resetWorkingLitPi()
 {
-    if(_fIcompact)
-    {
-        for(int i=0; i<_nRPi; i++)
-            _litRPi[i] = 0;
-    }
-    else
-    {
-        for(int i=0; i<_nPi; i++)
-            _litPi[i] = 0;
-    }
+    for(int i=0; i<_workingPi; i++)
+        _litWorkingPi[i] = 0;
 }
 
 // all set to one
 void IcompactMgr::resetWorkingLitPo()
 {
-    if(_fOcompact)
-    {
-        for(int i=0; i<_nRPo; i++)
-            _litRPo[i] = 1;
-    }
-    else
-    {
-        for(int i=0; i<_nPo; i++)
-            _litPo[i] = 1;
-    }
+    for(int i=0; i<_workingPo; i++)
+        _litWorkingPo[i] = 1;
 }
 
 // check if working litPi has at least one 1
 bool IcompactMgr::validWorkingLitPi()
 {
     int count = 0;
-    int nPi = (_fIcompact)? _nRPi: _nPi;
-    bool * litPi = (_fIcompact)? _litRPi: _litPi;
-
-    for(int i=0; i<nPi; i++)
-        if(litPi[i]) { count++; }
-
+    for(int i=0; i<_workingPi; i++)
+        if(_litWorkingPi[i]) { count++; }
     return (count > 0);
 }
 
@@ -383,12 +388,8 @@ bool IcompactMgr::validWorkingLitPi()
 bool IcompactMgr::validWorkingLitPo()
 {
     int count = 0;
-    int nPo = (_fOcompact)? _nRPo: _nPo;
-    bool * litPo = (_fOcompact)? _litRPo: _litPo;
-
-    for(int i=0; i<nPo; i++)
-        if(litPo[i]) { count++; }
-
+    for(int i=0; i<_workingPo; i++)
+        if(_litWorkingPo[i]) { count++; }
     return (count > 0);
 }
 
@@ -414,22 +415,6 @@ void IcompactMgr::getInfoFromSamples()
     _poNames = new char*[_nPo];
     Abc_NtkForEachPo(pNtk, pObj, i)
         _poNames[i] = Abc_ObjName(pObj);
-}
-
-bool IcompactMgr::singleSupportComplement(int piIdx, int poIdx)
-{
-    char iBit, oBit;
-    char buff[102400];
-    char * unused __attribute__((unused)); // get rid of fget warnings
-    FILE* fpattern = fopen(_samplesplaFileName, "r");
-    for(int i=0; i<6; i++) // get first pattern
-        unused = fgets(buff, 102400, fpattern);
-    
-    iBit = buff[piIdx];
-    oBit = buff[_nPi + 1 + poIdx];
-
-    fclose(fpattern);
-    return (iBit != oBit);
 }
 
 void IcompactMgr::orderPiPo(Abc_Ntk_t * pNtk)
@@ -536,10 +521,10 @@ void IcompactMgr::supportInfo_Patt()
 
     _fSupportPatt = 1;
     int result;
-    int nPi = getWorkingPiNum();
-    int nPo = getWorkingPoNum();
-    bool* litPi = getWorkingLitPi();
-    bool* litPo = getWorkingLitPo();
+    int nPi = _workingPi;
+    int nPo = _workingPo;
+    bool* litPi = _litWorkingPi;
+    bool* litPo = _litWorkingPo;
 
     // build _supportInfo_patt
     _supportInfo_patt = new int*[nPo];
@@ -701,16 +686,16 @@ Abc_Ntk_t * IcompactMgr::ntkFraig(Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtkExdc)
 // write compacted pla using working _litPi/_litPo
 void IcompactMgr::writeCompactpla(char* outputplaFileName)
 {
-    if(!validWorkingLitPi()) // constant case must be handled else where
+    if(!validWorkingLitPi() || !validWorkingLitPo())
     {
         printf("No compact pla written.\n");
         return;
     }
     
-    int nPi = getWorkingPiNum();
-    int nPo = getWorkingPoNum();
-    bool * litPi = getWorkingLitPi();
-    bool * litPo = getWorkingLitPo();
+    int nPi = _workingPi;
+    int nPo = _workingPo;
+    bool * litPi = _litWorkingPi;
+    bool * litPo = _litWorkingPo;
     char * plaFile = _workingFileName;
 
     FILE* fcompactpla = fopen(outputplaFileName, "w");
@@ -738,7 +723,16 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     fprintf(fcompactpla, ".i %i\n", lenPi);
     fprintf(fcompactpla, ".o %i\n", lenPo);
     fprintf(fcompactpla, ".ilb");
-    for(int i=0; i<nPi; i++) { if(litPi[i]) { fprintf(fcompactpla, " %s", _piNames[i]); } }
+    for(int i=0; i<nPi; i++) 
+    {
+        if(litPi[i]) 
+        {
+            if(nPi == _nRPo)
+                fprintf(fcompactpla, " %s", _rpoNames[i]); 
+            else
+                fprintf(fcompactpla, " %s", _piNames[i]); 
+        }
+    }
     fprintf(fcompactpla, "\n.ob");
     for(int i=0; i<nPo; i++) { if(litPo[i]) { fprintf(fcompactpla, " %s", _poNames[i]); } }
     fprintf(fcompactpla, "\n.type fr\n");
@@ -768,14 +762,14 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
 
 void IcompactMgr::writeCaresetpla(char* outputplaFileName)
 {
-    if(!validWorkingLitPi()) // constant case must be handled else where
+    if(!validWorkingLitPi() || !validWorkingLitPo())
     {
         printf("No compact pla written.\n");
         return;
     }
     
-    int nPi = getWorkingPiNum();
-    bool * litPi = getWorkingLitPi();
+    int nPi = _workingPi;
+    bool * litPi = _litWorkingPi;
     char * plaFile = _workingFileName;
 
     FILE* fcompactpla = fopen(outputplaFileName, "w");
@@ -801,7 +795,16 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     fprintf(fcompactpla, ".i %i\n", lenPi);
     fprintf(fcompactpla, ".o 1\n");
     fprintf(fcompactpla, ".ilb");
-    for(int i=0; i<nPi; i++) { if(litPi[i]) { fprintf(fcompactpla, " %s", _piNames[i]); } }
+    for(int i=0; i<nPi; i++) 
+    {
+        if(litPi[i]) 
+        {
+            if(nPi == _nRPo)
+                fprintf(fcompactpla, " %s", _rpoNames[i]); 
+            else
+                fprintf(fcompactpla, " %s", _piNames[i]); 
+        }
+    }
     fprintf(fcompactpla, "\n.ob care");
     fprintf(fcompactpla, "\n.type fd\n");
     while(fgets(buff, 102400, fpattern))
@@ -821,15 +824,22 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList, int fMfs)
+Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs)
 {
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;
     char * caresetFileName = "tmp.careset.pla";
 
+    // set conditions later. Support w/o ocompact for now.
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+
     // init ntk
     pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
-    for(int i=0; i<_nPi; i++)
+    for(int i=0; i<_workingPi; i++)
     {
         pPi = Abc_NtkCreatePi(pNtk);
         Abc_ObjAssignName(pPi, _piNames[i], NULL);
@@ -837,10 +847,10 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList, int fMfs)
 
     // each po function
     vector<int> fanInList;
-    for(int poIdx=0; poIdx<_nPo; poIdx++)
+    for(int poIdx=0; poIdx<_workingPo; poIdx++)
     {
         fanInList.clear();
-        for(int piIdx=0; piIdx<_nPi; piIdx++)
+        for(int piIdx=0; piIdx<_workingPi; piIdx++)
             if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
         
         if(fanInList.size() == 1)
@@ -848,15 +858,15 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList, int fMfs)
             pPo = Abc_NtkCreatePo(pNtk);
             Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
             Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, fanInList[0]));
-            if(singleSupportComplement(fanInList[0], poIdx)) 
+            if(singleSupportComplement(_workingFileName, fanInList[0], _nPi + 1 + poIdx)) 
                 Abc_ObjSetFaninC(pPo, 0); // set complement
         }
         else
         {
-            for(int i=0; i<_nPi; i++) { _litPi[i] = 0; }
-            for(int i=0, n=fanInList.size(); i<n; i++) { _litPi[fanInList[i]] = 1; }
-            for(int i=0; i<_nPo; i++) { _litPo[i] = 0; }
-            _litPo[poIdx] = 1;
+            for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 0; }
+            for(int i=0, n=fanInList.size(); i<n; i++) { _litWorkingPi[fanInList[i]] = 1; }
+            for(int i=0; i<_workingPo; i++) { _litWorkingPo[i] = 0; }
+            _litWorkingPo[poIdx] = 1;
 
             writeCompactpla(_tmpFileName);
             pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
@@ -877,7 +887,73 @@ Abc_Ntk_t * IcompactMgr::constructNtk(bool **minMaskList, int fMfs)
 
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
-    if(ntkVerifySamples(pNtk, _samplesplaFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+    if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+    return pNtk;
+}
+
+Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs)
+{
+    bool check;
+    Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
+    Abc_Obj_t *pPi, *pPo;
+    char * caresetFileName = "tmp.careset.pla";
+
+    strncpy(_workingFileName, _outputmappingFileName, 500);
+    _litWorkingPi = _litRPo;
+    _litWorkingPo = _litPo;
+    _workingPi = _nRPo;
+    _workingPo = _nPo;
+
+    // init ntk
+    pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
+    for(int i=0; i<_nRPo; i++)
+    {
+        pPi = Abc_NtkCreatePi(pNtk);
+        Abc_ObjAssignName(pPi, _rpoNames[i], NULL);
+    }
+
+    // each po function
+    for(int poIdx=0; poIdx<_workingPo; poIdx++)
+    {
+        check = 0;
+        if(recordPo != NULL)
+            if(recordPo[poIdx] >= 0 && recordPo[poIdx] < _nRPo)
+                check = 1;
+
+        if(check)
+        {
+            pPo = Abc_NtkCreatePo(pNtk);
+            Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
+            Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, recordPo[poIdx]));
+            if(singleSupportComplement(_workingFileName, recordPo[poIdx], _nRPo + 1 + poIdx))
+                Abc_ObjSetFaninC(pPo, 0); // set complement
+        }
+        else
+        {
+            for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
+            for(int i=0; i<_workingPo; i++) { _litWorkingPo[i] = 0; }
+            _litWorkingPo[poIdx] = 1;
+
+            writeCompactpla(_tmpFileName);
+            pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
+            writeCaresetpla(caresetFileName);
+            pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+            // Abc_ObjSetFaninC(Abc_NtkPo(pNtkCare, 0), 0); // set complement to get exdc
+            if(fMfs)
+                pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
+
+            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);
+            // assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
+            if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
+            Abc_NtkDelete(pNtkTmp);
+            // Abc_NtkDelete(pNtkCare); // error: internal flags used
+        }
+    }
+    pNtk = ntkMinimize(pNtk, 1, 0);
+
+    orderPiPo(pNtk);
+    if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+    // if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
     return pNtk;
 }
 
@@ -1025,15 +1101,13 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
     if(minMask == NULL) { return -1; }
     
     // report
-    int nPi = getWorkingPiNum();
-    bool * litPi = getWorkingLitPi();
-    for(size_t i=0; i<nPi; i++)
-        litPi[i] = 0;
-    for(size_t i=0; i<nPi; i++)
+    for(size_t i=0; i<_workingPi; i++)
+        _litWorkingPi[i] = 0;
+    for(size_t i=0; i<_workingPi; i++)
     {
         if(minMask[i] == 1)
         {
-            litPi[i] = 1;
+            _litWorkingPi[i] = 1;
             result++;
         }
     }
@@ -1075,10 +1149,10 @@ int IcompactMgr::icompact_main()
     if(mgrStatus()) { return -1; }
     if(!validWorkingLitPo()) { return -1; }
 
-    int nPi = getWorkingPiNum();
-    int nPo = getWorkingPoNum();
-    bool * litPi = getWorkingLitPi();
-    bool * litPo = getWorkingLitPo();
+    int nPi = _workingPi;
+    int nPo = _workingPo;
+    bool * litPi = _litWorkingPi;
+    bool * litPo = _litWorkingPo;
     Abc_Ntk_t * pNtk_func = _pNtk_func;
     Abc_Ntk_t * pNtk_careset = _pNtk_careset;
     int pLits[nPi]; // satSolver assumption
@@ -1327,10 +1401,10 @@ int IcompactMgr::icompact_direct_encode_with_c()
     if(mgrStatus()) { return -1; }
     if(!validWorkingLitPo()) { return -1; }
 
-    int nPi = getWorkingPiNum();
-    int nPo = getWorkingPoNum();
-    bool * litPi = getWorkingLitPi();
-    bool * litPo = getWorkingLitPo();
+    int nPi = _workingPi;
+    int nPo = _workingPo;
+    bool * litPi = _litWorkingPi;
+    bool * litPo = _litWorkingPo;
     char* plaFile = _workingFileName;
     Abc_Ntk_t* pNtk_careset = _pNtk_careset;
     int pLits[nPi];
@@ -1628,7 +1702,6 @@ int IcompactMgr::icompact_direct_encode_with_c()
 int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
 {
     char* plaFile = _workingFileName;
-    int nRPo;
     FILE* ff, *fReencode, *fMapping;
     char buff[102400];
     char* t;
@@ -1637,6 +1710,8 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
     std::map<std::string, int> mapVar;
 
     ff = fopen(plaFile, "r"); // .i .o .type fr
+    unused = fgets(buff, 102400, ff);
+    unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
@@ -1653,23 +1728,35 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
     }
     fclose(ff);
 
-    nRPo = 64 - __builtin_clzll(count);
-    char* one_line = new char[nRPo+1];
-    one_line[nRPo] = '\0';
+    _nRPo = 64 - __builtin_clzll(count);
+    char* one_line = new char[_nRPo+1];
+    one_line[_nRPo] = '\0';
     int encoding;
 
+    _rpoNames = setDummyNames(_nRPo, "reO_");
+    _litRPo = new bool[_nRPo];
     // header
     fReencode = fopen(reencodeplaFile, "w");
     fprintf(fReencode, ".i %i\n", _nPi);
-    fprintf(fReencode, ".o %i\n", nRPo);
-    fprintf(fReencode, ".type fr");
+    fprintf(fReencode, ".o %i\n", _nRPo);
+    fprintf(fReencode, ".ilb");
+    for(int i=0; i<_nPi; i++) { fprintf(fReencode, " %s", _piNames[i]); }
+    fprintf(fReencode, "\n.ob");
+    for(int i=0; i<_nRPo; i++) { fprintf(fReencode, " %s", _rpoNames[i]); }
+    fprintf(fReencode, "\n.type fr\n");
 
     fMapping  = fopen(mapping, "w");
-    fprintf(fMapping, ".i %i\n", nRPo);
+    fprintf(fMapping, ".i %i\n", _nRPo);
     fprintf(fMapping, ".o %i\n", _nPo);
-    fprintf(fMapping, ".type fr");
+    fprintf(fMapping, ".ilb");
+    for(int i=0; i<_nRPo; i++) { fprintf(fMapping, " %s", _rpoNames[i]); }
+    fprintf(fMapping, "\n.ob");
+    for(int i=0; i<_nPo; i++) { fprintf(fMapping, " %s", _poNames[i]); }
+    fprintf(fMapping, "\n.type fr\n");
 
     ff = fopen(plaFile, "r");
+    unused = fgets(buff, 102400, ff);
+    unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
     unused = fgets(buff, 102400, ff);
@@ -1680,7 +1767,7 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
         t = strtok(NULL, " \n");
         std::string s(t);
         encoding = mapVar[s];
-        for(int i=0; i<nRPo; i++)
+        for(int i=0; i<_nRPo; i++)
         {
             int rbit = encoding%2;
             one_line[i] = (rbit)? '1': '0';
@@ -1694,14 +1781,14 @@ int IcompactMgr::reencode_naive(char* reencodeplaFile, char* mapping)
     fclose(ff);
     fclose(fReencode);
     fclose(fMapping);
-    return nRPo;
+    return _nRPo;
 }
 
 // fMode = 1 input reencode, = 0 output reencode
 int IcompactMgr::reencode_heuristic(char* reencodeplaFile, char* mapping, bool fMode, int newVar, int* record)
 {
     char* plaFile = _workingFileName;
-    int nRPo, lineNum;
+    int lineNum;
     FILE* ff        = fopen(plaFile, "r");         // .i .o .type fr
     FILE* fReencode = fopen(reencodeplaFile, "w"); // .i .o .type fr
     FILE* fMapping  = fopen(mapping, "w");         // .i .o .type fr
@@ -1711,18 +1798,37 @@ int IcompactMgr::reencode_heuristic(char* reencodeplaFile, char* mapping, bool f
 
     ReencodeHeuristicMgr* mgr = new ReencodeHeuristicMgr();
     mgr->readFile(plaFile, fMode);
-    nRPo = mgr->getEncoding(newVar);
-    mgr->getMapping(fMode, record);  
+    _nRPo = mgr->getEncoding(newVar);
+    mgr->getMapping(fMode, record); 
+
+    _rpoNames = setDummyNames(_nRPo, "reO_");
+    _litRPo = new bool[_nRPo]; 
     
+    // header
+    fReencode = fopen(reencodeplaFile, "w");
+    fprintf(fReencode, ".i %i\n", _nPi);
+    fprintf(fReencode, ".o %i\n", _nRPo);
+    fprintf(fReencode, ".ilb");
+    for(int i=0; i<_nPi; i++) { fprintf(fReencode, " %s", _piNames[i]); }
+    fprintf(fReencode, "\n.ob");
+    for(int i=0; i<_nRPo; i++) { fprintf(fReencode, " %s", _rpoNames[i]); }
+    fprintf(fReencode, "\n.type fr\n");
+
+    fMapping  = fopen(mapping, "w");
+    fprintf(fMapping, ".i %i\n", _nRPo);
+    fprintf(fMapping, ".o %i\n", _nPo);
+    fprintf(fMapping, ".ilb");
+    for(int i=0; i<_nRPo; i++) { fprintf(fMapping, " %s", _rpoNames[i]); }
+    fprintf(fMapping, "\n.ob");
+    for(int i=0; i<_nPo; i++) { fprintf(fMapping, " %s", _poNames[i]); }
+    fprintf(fMapping, "\n.type fr\n");
+
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, ".i %i\n", nRPo);
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, ".o %i\n", nRPo);
-    fprintf(fMapping, "%s", buff);
     unused = fgets(buff, 102400, ff);
-    fprintf(fReencode, "%s", buff);
-    fprintf(fMapping, "%s", buff);
+    unused = fgets(buff, 102400, ff);
+    unused = fgets(buff, 102400, ff);
+    
     lineNum = 0;
     while(fgets(buff, 102400, ff))
     {
@@ -1739,7 +1845,7 @@ int IcompactMgr::reencode_heuristic(char* reencodeplaFile, char* mapping, bool f
     fclose(ff);
     fclose(fReencode);
     fclose(fMapping);
-    return nRPo;
+    return _nRPo;
 }
 
 ABC_NAMESPACE_IMPL_END
