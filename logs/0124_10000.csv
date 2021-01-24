@@ -1,0 +1,65 @@
+
+benchmark, nPi, nPo
+../../benchmarks/ISCAS/c1355.blif, 41, 32
+Reencoded size
+  naive    , 14
+  reencode , 15
+Timing (s), ocompact, construct ntk
+  naive    , 0.023904, 161.426550
+  reencode , 0.062429, 113.381273
+Overall circuit size(aig gate count)
+  original , 504
+  naive    , 101365
+  reencode , 57513
+
+benchmark, nPi, nPo
+../../benchmarks/ISCAS/c5315.blif, 178, 123
+Reencoded size
+  naive    , 14
+  reencode , 15
+Timing (s), ocompact, construct ntk
+  naive    , 0.035993, 509.825203
+  reencode , 0.192520, 471.478239
+Overall circuit size(aig gate count)
+  original , 1780
+  naive    , 280136
+  reencode , 220812
+
+benchmark, nPi, nPo
+../../benchmarks/ISCAS/c7552.blif, 207, 108
+Reencoded size
+  naive    , 14
+  reencode , 15
+Timing (s), ocompact, construct ntk
+  naive    , 0.035033, 473.894336
+  reencode , 0.180310, 452.551081
+Overall circuit size(aig gate count)
+  original , 2093
+  naive    , 271776
+  reencode , 208173
+
+benchmark, nPi, nPo
+../../benchmarks/ISCAS/s1488.blif, 14, 25
+Reencoded size
+  naive    , 8
+  reencode , 10
+Timing (s), ocompact, construct ntk
+  naive    , 0.011797, 2.290260
+  reencode , 0.012438, 1.119416
+Overall circuit size(aig gate count)
+  original , 663
+  naive    , 1112
+  reencode , 494
+
+benchmark, nPi, nPo
+../../benchmarks/ISCAS/s5378.blif, 214, 213
+Reencoded size
+  naive    , 14
+  reencode , 15
+Timing (s), ocompact, construct ntk
+  naive    , 0.041962, 737.057021
+  reencode , 0.337951, 718.566328
+Overall circuit size(aig gate count)
+  original , 1390
+  naive    , 408521
+  reencode , 326524

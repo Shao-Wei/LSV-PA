@@ -37,6 +37,7 @@ ABC_NAMESPACE_HEADER_START
 // icompact heuristic does not reset patter between each iter
 // ocompact heuristic may have '-' in encoding, which is not valid for icompact pla format
 // ocompact heuristic use po signals with small supports
+// omap construction checking fail at pntk to dar
 
 // base/abci/abcStrash.c
 extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }

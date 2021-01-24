@@ -247,6 +247,7 @@ int IcompactMgr::exp_omap_construction()
     if(_resultlogFileName == NULL) { printf("No log file. Abort.\n"); }
 
     double time_h1, time_h2, time_c1, time_c2;
+    int rpo1, rpo2;
     Abc_Ntk_t *pNtk1, *pNtk2;
     FILE *fLog;
 
@@ -261,6 +262,7 @@ _step_time = Abc_Clock();
     _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
 _end_time = Abc_Clock();
 time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    rpo1 = _nRPo;
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
@@ -280,6 +282,7 @@ _step_time = Abc_Clock();
     _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, 4, recordPo);
 _end_time = Abc_Clock();
 time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
+    rpo2 = _nRPo;
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
@@ -291,16 +294,21 @@ time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     printf("[Info] Compare constructed circuit\n");
     fLog = fopen(_resultlogFileName, "a");
 
-    fprintf(fLog, "\nbenchmark, nPattern, uniquePattern, portion(%%)\n");
-    fprintf(fLog, "%s\n", _funcFileName);
+    fprintf(fLog, "\nbenchmark, nPi, nPo\n");
+    fprintf(fLog, "%s, %i, %i\n", _funcFileName, _nPi, _nPo);
     
+    fprintf(fLog, "Reencoded size\n");
+    fprintf(fLog, "  naive    , %i\n", rpo1);
+    fprintf(fLog, "  reencode , %i\n", rpo2);
+
     fprintf(fLog, "Timing (s), ocompact, construct ntk\n");
-    fprintf(fLog, "w/ naive    , %f, %f\n", time_h1, time_c1);
-    fprintf(fLog, "w/ reencode , %f, %f\n", time_h2, time_c2);
+    fprintf(fLog, "  naive    , %f, %f\n", time_h1, time_c1);
+    fprintf(fLog, "  reencode , %f, %f\n", time_h2, time_c2);
 
     fprintf(fLog, "Overall circuit size(aig gate count)\n");
-    fprintf(fLog, " original, %i\n w/ naive, %i\n w/ reencode, %i", Abc_NtkNodeNum(_pNtk_func), Abc_NtkNodeNum(pNtk1), Abc_NtkNodeNum(pNtk2));
-
+    fprintf(fLog, "  original , %i\n", Abc_NtkNodeNum(_pNtk_func));
+    fprintf(fLog, "  naive    , %i\n", Abc_NtkNodeNum(pNtk1));
+    fprintf(fLog, "  reencode , %i\n", Abc_NtkNodeNum(pNtk2));
     // clean up
     fclose(fLog);
     Abc_NtkDelete(pNtk1);
