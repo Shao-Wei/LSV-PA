@@ -254,6 +254,67 @@ usage:
     return 1;   
 }
 
+static int ntkverify_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    int result       = 0;
+    int c            = 0;
+
+    FILE * pFile;
+    Abc_Ntk_t * pNtk;
+    char *verifyFileName;
+
+    pNtk = Abc_FrameReadNtk(pAbc);
+    // set defaults
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+
+    if ( argc != globalUtilOptind + 1 )
+    {
+        goto usage;
+    }
+
+    // get the input file name
+    verifyFileName = argv[globalUtilOptind];
+    if ( (pFile = fopen( verifyFileName, "r" )) == NULL )
+    {
+        Abc_Print( -1, "Cannot open input file \"%s\". ", verifyFileName );
+        if ( (verifyFileName = Extra_FileGetSimilarName( verifyFileName, ".mv", ".blif", ".pla", ".eqn", ".bench" )) )
+            Abc_Print( 1, "Did you mean \"%s\"?", verifyFileName );
+        Abc_Print( 1, "\n" );
+        return 1;
+    }
+    fclose(pFile);
+    
+    // icompactUtil.cpp
+    if(!Abc_NtkIsStrash(pNtk))
+        pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
+    ntkVerifySamples(pNtk, verifyFileName, 0);
+
+    return result;
+    
+usage:
+    Abc_Print( -2, "usage: verify [-h] <file>\n" );
+    Abc_Print( -2, "\t         verify the circuit with given patterns\n" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t<file> : file with the given patterns\n");
+    return 1;
+}
+
 static int checkesp_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -669,6 +730,7 @@ usage:
 static void init(Abc_Frame_t* pAbc)
 { 
     Cmd_CommandAdd( pAbc, "AlCom", "compact", compact_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "gencareset", gencareset_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
     Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);

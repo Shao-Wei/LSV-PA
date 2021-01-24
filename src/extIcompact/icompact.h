@@ -173,9 +173,11 @@ private:
     Abc_Ntk_t * getNtk_samples(int fMinimize, int fCollapse);
     Abc_Ntk_t * getNtk_careset(int fMinimize, int fCollapse, int fBatch);
     Abc_Ntk_t * ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse);
-    Abc_Ntk_t * ntkMfs(Abc_Ntk_t * pNtk);
+    Abc_Ntk_t * ntkMfs(Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtkCare);
+    Abc_Ntk_t * ntkFraig(Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtkExdc);
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
+    void writeCaresetpla(char* outputplaFileName);
     Abc_Ntk_t * constructNtk(bool **minMaskList, int fMfs);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
