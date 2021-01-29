@@ -180,8 +180,8 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs);
-    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig);
+    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);

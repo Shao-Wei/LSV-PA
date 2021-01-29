@@ -65,8 +65,8 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     {
         _litPi = new bool[_nPi];
         _litPo = new bool[_nPo];
-        _nRPi = _nPi; // _litRPi built later
-        _nRPo = _nPo; // _litRPo built later
+        _nRPi = -1; // _litRPi built later
+        _nRPo = -1; // _litRPo built later
     }
     _pNtk_func = getNtk_func();
 }
@@ -135,7 +135,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
     {
         printf("  naive binary encoded\n");
         _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
-        _pNtk_omap = constructNtkOmap(NULL, 1);
+        _pNtk_omap = constructNtkOmap(NULL, 0, 1);
     }   
     else
     {
@@ -144,7 +144,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
         _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
         _rpoNames = setDummyNames(_nRPo, "reO_");
         _litRPo = new bool[_nRPo];
-        _pNtk_omap = constructNtkOmap(recordPo, 1);
+        _pNtk_omap = constructNtkOmap(recordPo, 0, 1);
         delete [] recordPo;
     }
     _end_time = Abc_Clock();
@@ -210,7 +210,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtkEach(minMaskList, 1);
+        _pNtk_core = constructNtkEach(minMaskList, 0, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -762,9 +762,9 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
 
 void IcompactMgr::writeCaresetpla(char* outputplaFileName)
 {
-    if(!validWorkingLitPi() || !validWorkingLitPo())
+    if(!validWorkingLitPi())
     {
-        printf("No compact pla written.\n");
+        printf("No careset pla written.\n");
         return;
     }
     
@@ -824,7 +824,7 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs)
+Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig)
 {
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;
@@ -870,28 +870,33 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs)
 
             writeCompactpla(_tmpFileName);
             pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
-            writeCaresetpla(caresetFileName);
-            pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
-            // Abc_ObjSetFaninC(Abc_NtkPo(pNtkCare, 0), 0); // set complement to get exdc
-            if(fMfs)
-                pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
-
+            // writeCaresetpla(caresetFileName);
+            // pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+            // if(fMfs)
+            //     pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
             pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);
-            // assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
             // Abc_NtkDelete(pNtkCare); // error: internal flags used
         }
     }
     pNtk = ntkMinimize(pNtk, 1, 0);
-
+    if(fFraig)
+    {
+        for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
+        writeCaresetpla(caresetFileName);
+        pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+        pNtkCare = Abc_NtkStrash(pNtkCare, 0, 0, 0);
+        Abc_ObjXorFaninC( Abc_NtkPo(pNtkCare, 0), 0 );
+        pNtk = ntkFraig(pNtk, pNtkCare);
+    } 
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
     return pNtk;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs)
+Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig)
 {
     bool check;
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
@@ -936,21 +941,26 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs)
 
             writeCompactpla(_tmpFileName);
             pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
-            writeCaresetpla(caresetFileName);
-            pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
-            // Abc_ObjSetFaninC(Abc_NtkPo(pNtkCare, 0), 0); // set complement to get exdc
-            if(fMfs)
-                pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
-
+            // writeCaresetpla(caresetFileName);
+            // pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+            // if(fMfs)
+            //     pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
             pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);
-            // assert(strcmp(Abc_ObjName(Abc_NtkPo(pNtkTmp, 0)), _poNames[poIdx]) == 0);
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
             // Abc_NtkDelete(pNtkCare); // error: internal flags used
         }
     }
     pNtk = ntkMinimize(pNtk, 1, 0);
-
+    if(fFraig)
+    {
+        for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
+        writeCaresetpla(caresetFileName);
+        pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+        pNtkCare = Abc_NtkStrash(pNtkCare, 0, 0, 0);
+        Abc_ObjXorFaninC( Abc_NtkPo(pNtkCare, 0), 0 );
+        pNtk = ntkFraig(pNtk, pNtkCare);
+    } 
     orderPiPo(pNtk);
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     // if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
