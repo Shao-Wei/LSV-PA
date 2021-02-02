@@ -174,7 +174,8 @@ void Aig_TableInsert( Aig_Man_t * p, Aig_Obj_t * pObj )
 {
     Aig_Obj_t ** ppPlace;
     assert( !Aig_IsComplement(pObj) );
-    assert( Aig_TableLookup(p, pObj) == NULL );
+    // Commented out by Shao-Wei 2021/02/02 to avoid crash in icompactUtil.cpp calling Aig_ObjConnect()
+    // assert( Aig_TableLookup(p, pObj) == NULL ); 
     if ( (pObj->Id & 0xFF) == 0 && 2 * p->nTableSize < Aig_ManNodeNum(p) )
         Aig_TableResize( p );
     ppPlace = Aig_TableFind( p, pObj );

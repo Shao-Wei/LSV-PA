@@ -222,19 +222,17 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
     }
 
     Vec_StrFree( vSimInfo );
-    Aig_ManStop(pAig);
     return 0;
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
-int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName, int * pCount)
+int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount)
 {
     Vec_Str_t * vSimInfo, * vSimPart;
     Fra_Sml_t * p = NULL;
     int nPatterns, nPart, nPatPerSim;
     int patLen;
     int correctCount, totalCount = 0;
-    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
 
     // read comb patterns from file
     vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
@@ -277,8 +275,64 @@ int smlVerifyCombGiven( Abc_Ntk_t* pNtk, char * pFileName, int * pCount)
     }
     printf(" : %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
     Vec_StrFree( vSimInfo );
-    Aig_ManStop(pAig);
     return (totalCount == nPatterns)? 1: 0;
+}
+
+int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate)
+{
+    Vec_Str_t * vSimInfo, * vSimPart;
+    Fra_Sml_t * p = NULL;
+    int nPatterns, nPart, nPatPerSim;
+    int patLen;
+    Aig_Obj_t * pObj;
+    int i, k, count;
+
+    // read comb patterns from file
+    vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
+    if ( vSimInfo == NULL )
+        return 1;
+
+    patLen = Aig_ManCiNum(pAig)+Aig_ManCoNum(pAig);
+    if ( Vec_StrSize(vSimInfo) % patLen != 0 )
+    {
+        printf( "File \"%s\": The number of binary digits (%d) is not divisible by the number of pi (%d) + po (%d).\n", 
+            pFileName, Vec_StrSize(vSimInfo), Aig_ManCiNum(pAig), Aig_ManCoNum(pAig) );
+        Vec_StrFree( vSimInfo );
+        return 1;
+    }
+
+    nPatPerSim = 4096;
+    nPatterns = Vec_StrSize(vSimInfo) / patLen;
+
+    nPart = (nPatterns < nPatPerSim)? nPatterns: nPatPerSim;
+    p = Fra_SmlStart( pAig, 0, 1, Abc_BitWordNum(nPart) );
+    vSimPart = Vec_StrAlloc(0);
+    for (int l=0; l<patLen*nPart; l++)
+        Vec_StrPush(vSimPart, Vec_StrEntry(vSimInfo, l));
+    
+    // start simulation
+    smlInitializeGiven( p, vSimPart );
+    Fra_SmlSimulateOne( p );
+    Aig_ManForEachObj(pAig, pObj, i)
+    {
+        if(Aig_Regular(pObj)->Id == 0) // const1
+            continue;
+        count = 0;
+        for(k=0; k<nPart; k++)
+        {
+            if(Abc_InfoHasBit(Fra_ObjSim( p, pObj->Id ), k) == 1)
+                count++;
+        }
+        if(count == 0)
+            vCandidate.push_back(make_pair(pObj->Id, 0));
+        else if(count == nPart)
+            vCandidate.push_back(make_pair(pObj->Id, 1));
+    }
+
+    Vec_StrFree( vSimPart );
+    Fra_SmlStop( p );
+    Vec_StrFree( vSimInfo );
+    return 0;
 }
 
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo)
