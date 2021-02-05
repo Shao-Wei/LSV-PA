@@ -362,6 +362,7 @@ static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     fclose(pFile);
 
     pNtkNew = ntkSTFault(pNtk, verifyFileName);
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
   
     return result;
     

@@ -21,7 +21,8 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// stuck-at-fault insertion
+// STF bug fix (case buffer node, reverse topo cand)
+// STF intergrated into compact
 
 ///////////////////////////
 // Todo
@@ -180,8 +181,8 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig);
-    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF);
+    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);
@@ -195,7 +196,7 @@ private:
 
     // experiments
     int exp_support_icompact_heuristic();
-    int exp_support_icompact_heuristic_mfs();
+    int exp_support_icompact_heuristic_options();
     int exp_omap_construction();
 };
 
@@ -204,7 +205,7 @@ extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int 
 
 // icompactGencareset.cpp
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
-int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount);
+int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fVerbose);
 int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
 void n_gen_AP(int nPat, int nPi, int nPo, char* filename);

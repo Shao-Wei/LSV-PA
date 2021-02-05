@@ -98,11 +98,11 @@ int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
     // verify
     pAig = Abc_NtkToDar(pNtk, 0, 0);
     if(!fVerbose)
-        result = smlVerifyCombGiven(pAig, pFile, NULL);
+        result = smlVerifyCombGiven(pAig, pFile, NULL, 1);
     else
     {
         int * pCount = new int[nPo_file]();
-        result = smlVerifyCombGiven(pAig, pFile, pCount);
+        result = smlVerifyCombGiven(pAig, pFile, pCount, 1);
         printf("correct pat num for each po:\n  ");
         for(int i=0; i<nPo_file; i++)
             printf(" %i", pCount[i]);
@@ -236,18 +236,20 @@ void removeSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
     {
         pFanout = vFanout[i].first;
         // printf("removeSTF %i, %i, %i\n", pFanout->Id, Aig_ObjFaninId0(pFanout), Aig_ObjFaninId1(pFanout) );
-        if( Aig_ObjFaninId0(pFanout) == 0 )
-        {
-            
-            pNewFanin0 = (vFanout[i].second)? Aig_Not(pObj): pObj;
-            pNewFanin1 = pFanout->pFanin1;
-        }
-        else
-        {
-            pNewFanin0 = pFanout->pFanin0;
-            pNewFanin1 = (vFanout[i].second)? Aig_Not(pObj): pObj;
-        }
+        pNewFanin0 = (Aig_Obj_t*)pFanout->pData;
+        pNewFanin1 = (vFanout[i].second)? Aig_Not(pObj): pObj;
+        pFanout->pData = NULL;
+
         Aig_ObjDisconnect(pAig, pFanout);
+
+        // special case when both child are const
+        if(Aig_ObjIsBuf(pFanout))
+        {
+            pFanout->Type = AIG_OBJ_AND;
+            Vec_PtrRemove( pAig->vBufs, pFanout);
+            pAig->nObjs[AIG_OBJ_AND]++;
+            pAig->nObjs[AIG_OBJ_BUF]--;
+        }   
 
         if(pNewFanin0 == NULL)
         {
@@ -276,29 +278,29 @@ int insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, i
     int iFanout = -1, k, c;
     Aig_ObjForEachFanout(pAig, pObj, pFanout, iFanout, k)
     {     
-        // printf("insertSTF %i, %i, %i\n", pFanout->Id, Aig_ObjFaninId0(pFanout), Aig_ObjFaninId1(pFanout) );
         if(Aig_ObjFanin0(pFanout) == Aig_Regular(pObj))
         {
-            c = Aig_ObjFaninC0(pFanout);
+            c = Aig_ObjFaninC0(pFanout); // reserve phase to pObj
+            pFanout->pData = (void*)pFanout->pFanin1; // reserve original fanin
             pNewFanin0 = (signal)? Aig_ManConst1(pAig): Aig_ManConst0(pAig);
             pNewFanin1 = pFanout->pFanin1;
         }
         else if (Aig_ObjFanin1(pFanout) == Aig_Regular(pObj))
         {
             c = Aig_ObjFaninC1(pFanout);
+            pFanout->pData = (void*)pFanout->pFanin0;
             pNewFanin0 = pFanout->pFanin0;
             pNewFanin1 = (signal)? Aig_ManConst1(pAig): Aig_ManConst0(pAig);
         }
-        else // collision
+        else // wrong fanout, collision maybe
         {
             // printf("(skip)\n");
             continue;
         }
+        // printf("insertSTF %i, %i, %i\n", pFanout->Id, Aig_ObjFaninId0(pFanout), Aig_ObjFaninId1(pFanout) );
         vFanout.push_back( make_pair(pFanout, c) );
         Aig_ObjDisconnect(pAig, pFanout);
-        // if( Aig_TableLookup(pAig, pFanout) != NULL )
-        //     printf("not deleted: %i, %i, %i\n", Aig_Regular(pFanout)->Id, Aig_ObjFanin0(pFanout)->Id, Aig_ObjFanin1(pFanout)->Id);
-
+        
         if(pNewFanin0 == NULL)
         {
             pNewFanin0 = pNewFanin1;
@@ -314,6 +316,20 @@ int insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, i
                     pNewFanin0 = pNewFanin1;
                     pNewFanin1 = pTmp;
                 }
+                // special case when both child are const after insertion
+                if(Aig_Regular(pNewFanin0)->Id == Aig_Regular(pNewFanin1)->Id)
+                {
+                    if(Aig_ObjIsAnd(pFanout))
+                    {
+                        pFanout->Type = AIG_OBJ_BUF;
+                        Vec_PtrPush( pAig->vBufs, pFanout);
+                        pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
+                        pAig->nObjs[AIG_OBJ_AND]--;
+                        pAig->nObjs[AIG_OBJ_BUF]++;
+                    }
+                    pNewFanin0 = (Aig_ObjFaninC0(pFanout) || Aig_ObjFaninC1(pFanout))? Aig_ManConst0(pAig): Aig_ManConst1(pAig);
+                    pNewFanin1 = NULL;
+                }
             }       
         }
         Aig_ObjConnect(pAig, pFanout, pNewFanin0, pNewFanin1); 
@@ -323,7 +339,7 @@ int insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, i
 
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
 {
-    int nSuccess;
+    int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj;
     assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
@@ -332,42 +348,56 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
 
+    if(!smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+    {
+        printf("Bad pNtk / sim file pair\n");
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
     // find candidate STF
     vector< pair<int, int> > vCandidate;
     smlSTFaultCandidate(pAig, simFileName, vCandidate);
-    nSuccess = 0;
+    if(vCandidate.size() == 0)
+    {
+        printf("No STF candidate\n");
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
     for(int i=0, n=vCandidate.size(); i<n; i++)
     {
         pObj = Aig_ManObj(pAig, vCandidate[i].first);
+        if(pObj == NULL) // removed by previous STF insertion
+        {
+            nSkipped++;
+            continue;
+        }
         // printf("pObj id: %i\n", pObj->Id);
         vector< pair<Aig_Obj_t*, int> > vFanout;
         insertSTFault(pAig, pObj, vFanout, vCandidate[i].second);
-        if(smlVerifyCombGiven(pAig, simFileName, NULL))
+        if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
         {
+            printf("STF inserted at node %i\n", Aig_Regular(pObj)->Id);
             Aig_ManCleanup(pAig);
             nSuccess++;
         }       
         else
         {
             removeSTFault(pAig, pObj, vFanout, vCandidate[i].second);
-            // if(!smlVerifyCombGiven(pAig, simFileName, NULL))
-            //     printf("FFFFKKKKKKK\n");
         }
     }
-    printf("Success in inserting ST0/1 at candidates: %i / %lu\n", nSuccess, vCandidate.size());
+    printf("Success in inserting ST0/1 at candidates: %i (skipped %i) / %lu\n", nSuccess, nSkipped, vCandidate.size());
     Aig_ManCleanup(pAig);
     pNtkNew = Abc_NtkFromDar(pNtk, pAig);
     pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
+    // printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
 
     // make sure everything is okay
     if(!ntkVerifySamples(pNtkNew, simFileName, 0))
     {
-        printf("pNtk fucked up\n");
+        printf("The simulation check has failed.\n");
         return NULL;
     }
-    else
-        printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
-
     if ( !Abc_NtkCheck( pNtkNew ) )
     {
         printf( "The network check has failed.\n" );

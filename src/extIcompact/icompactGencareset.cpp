@@ -226,7 +226,7 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
-int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount)
+int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fVerbose)
 {
     Vec_Str_t * vSimInfo, * vSimPart;
     Fra_Sml_t * p = NULL;
@@ -252,7 +252,6 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount)
     nPatPerSim = 4096;
     nPatterns = Vec_StrSize(vSimInfo) / patLen;
 
-    printf("Verifying circuit:");
     for (int n=0; n<=(nPatterns/nPatPerSim); n++)
     {
         nPart = (n==(nPatterns/nPatPerSim))? (nPatterns%nPatPerSim): nPatPerSim;
@@ -273,7 +272,8 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount)
         Vec_StrFree( vSimPart );
         Fra_SmlStop( p );
     }
-    printf(" : %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
+    if(fVerbose)
+        printf("Verifying circuit: %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
     Vec_StrFree( vSimInfo );
     return (totalCount == nPatterns)? 1: 0;
 }
@@ -301,7 +301,7 @@ int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, i
         return 1;
     }
 
-    nPatPerSim = 4096;
+    nPatPerSim = 50;
     nPatterns = Vec_StrSize(vSimInfo) / patLen;
 
     nPart = (nPatterns < nPatPerSim)? nPatterns: nPatPerSim;
@@ -313,10 +313,8 @@ int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, i
     // start simulation
     smlInitializeGiven( p, vSimPart );
     Fra_SmlSimulateOne( p );
-    Aig_ManForEachObj(pAig, pObj, i)
+    Aig_ManForEachNodeReverse(pAig, pObj, i)
     {
-        if(Aig_Regular(pObj)->Id == 0) // const1
-            continue;
         count = 0;
         for(k=0; k<nPart; k++)
         {

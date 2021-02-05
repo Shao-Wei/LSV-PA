@@ -35,7 +35,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtkEach(minMaskList1, 0, 0);
+    pNtk1 = constructNtkEach(minMaskList1, 0, 0, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -52,7 +52,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtkEach(minMaskList2, 0, 0);
+    pNtk2 = constructNtkEach(minMaskList2, 0, 0, 0);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -131,9 +131,9 @@ int IcompactMgr::exp_support_icompact_heuristic()
     return 0;
 }
 
-// Experiment 20210118: support restricted icompact heuristic
+// Experiment 20210202: support restricted icompact heuristic, evaluate added options(fMfs, fFraig, fSTF)
 // evaluation file(-e) & log file(-l) must be specified
-int IcompactMgr::exp_support_icompact_heuristic_mfs()
+int IcompactMgr::exp_support_icompact_heuristic_options()
 {
     printf("[Info] Experiment: support restricted icompact heuristic\n");
     if(_resultlogFileName == NULL) { printf("No log file. Abort.\n"); }
@@ -164,13 +164,13 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtkEach(minMaskList, 0, 0);
+    pNtk1 = constructNtkEach(minMaskList, 0, 0, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtkEach(minMaskList, 0, 1);
+    pNtk2 = constructNtkEach(minMaskList, 0, 0, 1);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -183,14 +183,16 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     fprintf(fLog, "%s, %i, %i, %f\n", _funcFileName, _oriPatCount, _uniquePatCount, 100*_uniquePatCount/pow(2, _nPi));
     
     fprintf(fLog, "Timing (s), icompact, construct ntk\n");
-    fprintf(fLog, "w/ support    , %f, %f\n", time_h1, time_c1);
-    fprintf(fLog, "w/ support mfs, %f, %f\n", time_h2, time_c2);
+    fprintf(fLog, "w/o options, %f, %f\n", time_h1, time_c1);
+    fprintf(fLog, "w/  options, %f, %f\n", time_h2, time_c2);
 
     fprintf(fLog, "Overall circuit size(aig gate count)\n");
-    fprintf(fLog, " original, %i\n w/ support, %i\n w/ support mfs, %i", Abc_NtkNodeNum(_pNtk_func), Abc_NtkNodeNum(pNtk1), Abc_NtkNodeNum(pNtk2));
+    fprintf(fLog, "original, %i\n", Abc_NtkNodeNum(_pNtk_func));
+    fprintf(fLog, "w/o options, %i\n", Abc_NtkNodeNum(pNtk1));
+    fprintf(fLog, "w/  options, %i\n", Abc_NtkNodeNum(pNtk2));
 
-    fprintf(fLog, "\nSupport size on each po");
-    fprintf(fLog, "\noriginal");
+    fprintf(fLog, "Support size on each po\n");
+    fprintf(fLog, "original");
     for(int poIdx=0; poIdx<_nPo; poIdx++)
     {
         count = 0;
@@ -198,7 +200,7 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
             if(_supportInfo_func[poIdx][piIdx]) { count++; }
         fprintf(fLog, ", %i", count);        
     }
-    fprintf(fLog, "\nw/ support");
+    fprintf(fLog, "\nw/ compaction");
     for(int poIdx=0; poIdx<_nPo; poIdx++)
     {
         count = 0;
@@ -216,7 +218,7 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
         fprintf(fLog, ", %i", Abc_NtkNodeNum(pCone));
         Abc_NtkDelete(pCone);
     }
-    fprintf(fLog, "\nw/ support");
+    fprintf(fLog, "\nw/o options");
     for(int poIdx=0; poIdx<_nPo; poIdx++)
     {
         pObj = Abc_NtkPo(pNtk1, poIdx);
@@ -224,7 +226,7 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
         fprintf(fLog, ", %i", Abc_NtkNodeNum(pCone));
         Abc_NtkDelete(pCone);
     }
-    fprintf(fLog, "\nw/ support mfs");
+    fprintf(fLog, "\nw/  options");
     for(int poIdx=0; poIdx<_nPo; poIdx++)
     {
         pObj = Abc_NtkPo(pNtk2, poIdx);
@@ -232,6 +234,7 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
         fprintf(fLog, ", %i", Abc_NtkNodeNum(pCone));
         Abc_NtkDelete(pCone);
     }
+    fprintf(fLog, "\n");
         
     // clean up
     fclose(fLog);
@@ -241,6 +244,8 @@ int IcompactMgr::exp_support_icompact_heuristic_mfs()
     return 0;
 }
 
+// Experiment 20210124: output mapping circuit size (naive vs. reencode)
+// evaluation file(-e) & log file(-l) must be specified
 int IcompactMgr::exp_omap_construction()
 {
     printf("[Info] Experiment: output compaction mapping circuit construction\n");
@@ -266,7 +271,7 @@ time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
-    pNtk1 = constructNtkOmap(NULL, 0, 1);
+    pNtk1 = constructNtkOmap(NULL, 0, 1, 0);
 _end_time = Abc_Clock();
 time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
@@ -286,7 +291,7 @@ time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
-    pNtk2 = constructNtkOmap(recordPo, 0, 1);
+    pNtk2 = constructNtkOmap(recordPo, 0, 1, 0);
 _end_time = Abc_Clock();
 time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
