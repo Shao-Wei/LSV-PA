@@ -374,6 +374,65 @@ usage:
     return 1;
 }
 
+static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    int result       = 0;
+    int c            = 0;
+
+    FILE * pFile;
+    Abc_Ntk_t *pNtk, *pNtkNew;
+    char *verifyFileName;
+
+    pNtk = Abc_FrameReadNtk(pAbc);
+    // set defaults
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+
+    if ( argc != globalUtilOptind + 1 )
+    {
+        goto usage;
+    }
+
+    // get the input file name
+    verifyFileName = argv[globalUtilOptind];
+    if ( (pFile = fopen( verifyFileName, "r" )) == NULL )
+    {
+        Abc_Print( -1, "Cannot open input file \"%s\". ", verifyFileName );
+        if ( (verifyFileName = Extra_FileGetSimilarName( verifyFileName, ".mv", ".blif", ".pla", ".eqn", ".bench" )) )
+            Abc_Print( 1, "Did you mean \"%s\"?", verifyFileName );
+        Abc_Print( 1, "\n" );
+        return 1;
+    }
+    fclose(pFile);
+
+    pNtkNew = ntkSignalMerge(pNtk, verifyFileName);
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
+  
+    return result;
+    
+usage:
+    Abc_Print( -2, "usage: signalmerge [-h] <file>\n" );
+    Abc_Print( -2, "\t         merges internal signals to reduce circuit\n" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t<file> : file with the given patterns\n");
+    return 1;
+}
+
 static int checkesp_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -792,6 +851,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "compact", compact_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
     Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "readplabatch", readplabatch_Command, 1); // helper

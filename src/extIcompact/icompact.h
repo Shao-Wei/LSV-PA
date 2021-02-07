@@ -21,8 +21,7 @@ ABC_NAMESPACE_HEADER_START
 ///////////////////////////
 // Commit log
 ///////////////////////////
-// STF bug fix (case buffer node, reverse topo cand)
-// STF intergrated into compact
+// signal merge
 
 ///////////////////////////
 // Todo
@@ -181,8 +180,8 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF);
-    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge);
+    Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
     int icompact_heuristic(int iterNum, double fRatio, int fSupport);
@@ -207,6 +206,7 @@ extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int 
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
 int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fVerbose);
 int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
+int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
 int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
 void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
 void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
@@ -215,12 +215,13 @@ void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);
 // icompactUtil.cpp
 extern int espresso_input_count(char* filename);
 extern int check_pla_pipo(char *pFileName, int nPi, int nPo);
-void orderPiPo(Abc_Ntk_t * pNtk, int nPi, int nPo);
-int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
-int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
 char ** setDummyNames(int len, char * baseStr);
 bool singleSupportComplement(char * pFileName, int piIdx, int poIdx); // check if two bits are complement
+
+int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
+int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName); // modifies src/aig/aig/aigTable.c Aig_TableLookUp() to avoid assertion fail
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName);
 
 ABC_NAMESPACE_HEADER_END
 #endif

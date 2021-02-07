@@ -135,7 +135,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
     {
         printf("  naive binary encoded\n");
         _nRPo = reencode_naive(_outputreencodedFileName, _outputmappingFileName);
-        _pNtk_omap = constructNtkOmap(NULL, 0, 1, 1);
+        _pNtk_omap = constructNtkOmap(NULL, 0, 1, 1, 1);
     }   
     else
     {
@@ -144,7 +144,7 @@ int IcompactMgr::ocompact(int fOutput, int fNewVar)
         _nRPo = reencode_heuristic(_outputreencodedFileName, _outputmappingFileName, 0, fNewVar, recordPo);
         _rpoNames = setDummyNames(_nRPo, "reO_");
         _litRPo = new bool[_nRPo];
-        _pNtk_omap = constructNtkOmap(recordPo, 0, 1, 1);
+        _pNtk_omap = constructNtkOmap(recordPo, 0, 1, 1, 1);
         delete [] recordPo;
     }
     _end_time = Abc_Clock();
@@ -210,7 +210,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtkEach(minMaskList, 0, 1, 1);
+        _pNtk_core = constructNtkEach(minMaskList, 0, 1, 1, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -824,7 +824,7 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF)
+Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge)
 {
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;
@@ -895,14 +895,19 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
     {
         pNtk = ntkSTFault(pNtk, _workingFileName);
         pNtk = ntkMinimize(pNtk, 1, 0);
-    }  
+    }
+    if(fMerge)
+    {
+        pNtk = ntkSignalMerge(pNtk, _workingFileName);
+        pNtk = ntkMinimize(pNtk, 1, 0);
+    }
 
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
     return pNtk;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF)
+Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge)
 {
     bool check;
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
@@ -971,6 +976,11 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, 
     if(fSTF)
     {
         pNtk = ntkSTFault(pNtk, _workingFileName);
+        pNtk = ntkMinimize(pNtk, 1, 0);
+    }
+    if(fMerge)
+    {
+        pNtk = ntkSignalMerge(pNtk, _workingFileName);
         pNtk = ntkMinimize(pNtk, 1, 0);
     }
     

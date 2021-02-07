@@ -70,6 +70,34 @@ int check_pla_pipo(char *pFileName, int nPi, int nPo)
     return 0;
 }
 
+char ** setDummyNames(int len, char * baseStr)
+{
+    char ** result = new char*[len];
+    for(int i=0; i<len; i++)
+    {
+        char * buffer = new char[64]();
+        sprintf(buffer, "%s%i", baseStr, i);
+        result[i] = buffer;
+    }
+    return result;
+}
+
+bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
+{
+    char iBit, oBit;
+    char buff[102400];
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    FILE* fpattern = fopen(pFileName, "r");
+    for(int i=0; i<6; i++) // get first pattern
+        unused = fgets(buff, 102400, fpattern);
+    
+    iBit = buff[piIdx];
+    oBit = buff[poIdx];
+
+    fclose(fpattern);
+    return (iBit != oBit);
+}
+
 // returns 1 if all sim pat are correct, 0 otherwise, -1 if failed
 int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
 {
@@ -201,34 +229,6 @@ int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2)
     return 1;
 }
 
-char ** setDummyNames(int len, char * baseStr)
-{
-    char ** result = new char*[len];
-    for(int i=0; i<len; i++)
-    {
-        char * buffer = new char[64]();
-        sprintf(buffer, "%s%i", baseStr, i);
-        result[i] = buffer;
-    }
-    return result;
-}
-
-bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
-{
-    char iBit, oBit;
-    char buff[102400];
-    char * unused __attribute__((unused)); // get rid of fget warnings
-    FILE* fpattern = fopen(pFileName, "r");
-    for(int i=0; i<6; i++) // get first pattern
-        unused = fgets(buff, 102400, fpattern);
-    
-    iBit = buff[piIdx];
-    oBit = buff[poIdx];
-
-    fclose(fpattern);
-    return (iBit != oBit);
-}
-
 void removeSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, int> >& vFanout, int signal)
 {
     Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, * pTmp;
@@ -272,7 +272,7 @@ void removeSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
     }
 }
 
-int insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, int> >& vFanout, int signal)
+void insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, int> >& vFanout, int signal)
 {
     Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, *pTmp;
     int iFanout = -1, k, c;
@@ -334,7 +334,6 @@ int insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, i
         }
         Aig_ObjConnect(pAig, pFanout, pNewFanin0, pNewFanin1); 
     }
-    return 1;
 }
 
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
@@ -357,7 +356,7 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
 
     // find candidate STF
     vector< pair<int, int> > vCandidate;
-    smlSTFaultCandidate(pAig, simFileName, vCandidate);
+    smlSTFaultCandidate(pAig, simFileName, vCandidate); // candidate in reverse topological order
     if(vCandidate.size() == 0)
     {
         printf("No STF candidate\n");
@@ -387,6 +386,193 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         }
     }
     printf("Success in inserting ST0/1 at candidates: %i (skipped %i) / %lu\n", nSuccess, nSkipped, vCandidate.size());
+    Aig_ManCleanup(pAig);
+    pNtkNew = Abc_NtkFromDar(pNtk, pAig);
+    pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
+    // printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
+
+    // make sure everything is okay
+    if(!ntkVerifySamples(pNtkNew, simFileName, 0))
+    {
+        printf("The simulation check has failed.\n");
+        return NULL;
+    }
+    if ( !Abc_NtkCheck( pNtkNew ) )
+    {
+        printf( "The network check has failed.\n" );
+        Abc_NtkDelete( pNtkNew );
+        return NULL;
+    }
+
+    // clean up
+    Aig_ManFanoutStop(pAig);
+    Aig_ManStop(pAig);
+    return pNtkNew;
+}
+
+void signalUnMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector< pair<Aig_Obj_t*, int> >& vFanout)
+{
+    Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, * pTmp;
+    for(int i=0, n=vFanout.size(); i<n; i++)
+    {
+        pFanout = vFanout[i].first;
+        // printf("unmerge %i, %i, %i to %i\n", pFanout->Id, Aig_ObjFaninId0(pFanout), Aig_ObjFaninId1(pFanout), Aig_Regular(pObj2)->Id );
+        pNewFanin0 = (Aig_Obj_t*)pFanout->pData;
+        pNewFanin1 = (vFanout[i].second)? Aig_Not(pObj2): pObj2;
+        pFanout->pData = NULL;
+
+        Aig_ObjDisconnect(pAig, pFanout);
+
+        // special case when both child are const
+        if(Aig_ObjIsBuf(pFanout))
+        {
+            pFanout->Type = AIG_OBJ_AND;
+            Vec_PtrRemove( pAig->vBufs, pFanout);
+            pAig->nObjs[AIG_OBJ_AND]++;
+            pAig->nObjs[AIG_OBJ_BUF]--;
+        }   
+
+        if(pNewFanin0 == NULL)
+        {
+            pNewFanin0 = pNewFanin1;
+            pNewFanin1 = NULL;
+        }
+        else 
+        {
+            if (pNewFanin1 != NULL)
+            {
+                if(Aig_Regular(pNewFanin0)->Id > Aig_Regular(pNewFanin1)->Id)
+                {
+                    pTmp = pNewFanin0;
+                    pNewFanin0 = pNewFanin1;
+                    pNewFanin1 = pTmp;
+                }
+            }       
+        }
+        Aig_ObjConnect(pAig, pFanout, pNewFanin0, pNewFanin1);
+    }
+}
+
+void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector< pair<Aig_Obj_t*, int> >& vFanout)
+{
+    Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, *pTmp;
+    int iFanout = -1, k, c;
+    int comp = Aig_IsComplement(pObj1) ^ Aig_IsComplement(pObj2);
+    Aig_ObjForEachFanout(pAig, pObj2, pFanout, iFanout, k)
+    {     
+        if(Aig_ObjFanin0(pFanout) == Aig_Regular(pObj2))
+        {
+            c = Aig_ObjFaninC0(pFanout); // reserve phase to pObj2
+            pFanout->pData = (void*)pFanout->pFanin1; // reserve original fanin
+            pNewFanin0 = (comp ^ c)? Aig_Not(Aig_Regular(pObj1)): Aig_Regular(pObj1);
+            pNewFanin1 = pFanout->pFanin1;
+        }
+        else if (Aig_ObjFanin1(pFanout) == Aig_Regular(pObj2))
+        {
+            c = Aig_ObjFaninC1(pFanout);
+            pFanout->pData = (void*)pFanout->pFanin0;
+            pNewFanin0 = pFanout->pFanin0;
+            pNewFanin1 = (comp ^ c)? Aig_Not(Aig_Regular(pObj1)): Aig_Regular(pObj1);
+        }
+        else // wrong fanout, collision maybe
+        {
+            // printf("(skip)\n");
+            continue;
+        }
+        // printf("merge %i, %i, %i to %i\n", pFanout->Id, Aig_ObjFaninId0(pFanout), Aig_ObjFaninId1(pFanout), Aig_Regular(pObj1)->Id );
+        vFanout.push_back( make_pair(pFanout, c) );
+        Aig_ObjDisconnect(pAig, pFanout);
+        
+        if(pNewFanin0 == NULL)
+        {
+            pNewFanin0 = pNewFanin1;
+            pNewFanin1 = NULL;
+        }
+        else 
+        {
+            if (pNewFanin1 != NULL)
+            {
+                if(Aig_Regular(pNewFanin0)->Id > Aig_Regular(pNewFanin1)->Id)
+                {
+                    pTmp = pNewFanin0;
+                    pNewFanin0 = pNewFanin1;
+                    pNewFanin1 = pTmp;
+                }
+                // special case when both child are same node after insertion
+                if(Aig_Regular(pNewFanin0)->Id == Aig_Regular(pNewFanin1)->Id)
+                {
+                    if(Aig_ObjIsAnd(pFanout))
+                    {
+                        pFanout->Type = AIG_OBJ_BUF;
+                        Vec_PtrPush( pAig->vBufs, pFanout);
+                        pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
+                        pAig->nObjs[AIG_OBJ_AND]--;
+                        pAig->nObjs[AIG_OBJ_BUF]++;
+                    }
+                    pNewFanin0 = (Aig_ObjFaninC0(pFanout) ^ Aig_ObjFaninC1(pFanout))? Aig_Not(Aig_Regular(pObj1)): Aig_Regular(pObj1);
+                    pNewFanin1 = NULL;
+                }
+            }       
+        }
+        Aig_ObjConnect(pAig, pFanout, pNewFanin0, pNewFanin1); 
+    }
+}
+
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
+{
+    int nSuccess = 0, nSkipped = 0;
+    Abc_Ntk_t * pNtkNew;
+    Aig_Obj_t * pObj1, * pObj2;
+    assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
+    
+    pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
+    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
+    Aig_ManFanoutStart(pAig);
+
+    if(!smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+    {
+        printf("Bad pNtk / sim file pair\n");
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
+    // find candidate merge signals
+    vector< pair<int, int> > vCandidate;
+    smlSignalMergeCandidate(pAig, simFileName, vCandidate); // candidate in topological order
+    if(vCandidate.size() == 0)
+    {
+        printf("No signal merge candidate\n");
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
+    for(int i=vCandidate.size()-1; i>=0; i--)
+    {
+        pObj1 = Aig_ManObj(pAig, vCandidate[i].first);
+        pObj2 = Aig_ManObj(pAig, vCandidate[i].second);
+        if(pObj1 == NULL || pObj2 == NULL) // removed by previous merging
+        {
+            nSkipped++;
+            continue;
+        }
+
+        // try pObj2 merged to pObj1
+        vector< pair<Aig_Obj_t*, int> > vFanout2;
+        signalMerge(pAig, pObj1, pObj2, vFanout2);
+        if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+        {
+            printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
+            Aig_ManCleanup(pAig);
+            nSuccess++;
+            continue;
+        }       
+        else
+        {
+            signalUnMerge(pAig, pObj1, pObj2, vFanout2);
+        }
+    }
+    
+    printf("Success signal merging at candidates: %i (skipped %i) / %lu\n", nSuccess, nSkipped, vCandidate.size());
     Aig_ManCleanup(pAig);
     pNtkNew = Abc_NtkFromDar(pNtk, pAig);
     pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);

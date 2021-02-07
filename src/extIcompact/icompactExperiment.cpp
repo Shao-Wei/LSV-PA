@@ -35,7 +35,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtkEach(minMaskList1, 0, 0, 0);
+    pNtk1 = constructNtkEach(minMaskList1, 0, 0, 0, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -52,7 +52,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtkEach(minMaskList2, 0, 0, 0);
+    pNtk2 = constructNtkEach(minMaskList2, 0, 0, 0, 0);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -164,13 +164,13 @@ int IcompactMgr::exp_support_icompact_heuristic_options()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtkEach(minMaskList, 0, 0, 0);
+    pNtk1 = constructNtkEach(minMaskList, 0, 0, 0, 0);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtkEach(minMaskList, 0, 0, 1);
+    pNtk2 = constructNtkEach(minMaskList, 0, 0, 0, 1);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -271,7 +271,7 @@ time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
-    pNtk1 = constructNtkOmap(NULL, 0, 1, 0);
+    pNtk1 = constructNtkOmap(NULL, 0, 1, 0, 0);
 _end_time = Abc_Clock();
 time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
@@ -291,7 +291,7 @@ time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
     _rpoNames = setDummyNames(_nRPo, "reO_");
     _litRPo = new bool[_nRPo];
 _step_time = Abc_Clock();
-    pNtk2 = constructNtkOmap(recordPo, 0, 1, 0);
+    pNtk2 = constructNtkOmap(recordPo, 0, 1, 0, 0);
 _end_time = Abc_Clock();
 time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
