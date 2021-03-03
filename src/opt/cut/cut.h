@@ -87,6 +87,7 @@ struct Cut_CutStruct_t_
     unsigned           uCanon1;           // the canonical form 
     Cut_Cut_t *        pNext;             // the next cut in the list
     int                pLeaves[0];        // the array of leaves
+    unsigned int       uCare;             // the careset wrt this cut. Added by Shao-Wei 2021/2/24
 };
 
 static inline int        Cut_CutReadLeaveNum( Cut_Cut_t * p )  {  return p->nLeaves;   }

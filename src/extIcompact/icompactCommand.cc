@@ -15,6 +15,9 @@ static Abc_Ntk_t * DummyFunction( Abc_Ntk_t * pNtk )
 
 static int gencareset_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
+    // icompactGencareset.cpp
+    extern int careset2patterns(char* patternsFileName, char* caresetFilename, int nPi, int nPo);
+
     int result       = 0;
     int c            = 0;
     int fVerbose     = 0;
@@ -433,6 +436,114 @@ usage:
     return 1;
 }
 
+static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    int c;
+    int fUpdateLevel;
+    int fPrecompute;
+    int fUseZeros;
+    int fVerbose;
+    int fVeryVerbose;
+    int fPlaceEnable;
+
+    FILE * pFile;
+    char *simFileName;
+
+    // set defaults
+    fUpdateLevel = 1;
+    fPrecompute  = 0;
+    fUseZeros    = 0;
+    fVerbose     = 0;
+    fVeryVerbose = 0;
+    fPlaceEnable = 0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "lxzvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'l':
+            fUpdateLevel ^= 1;
+            break;
+        case 'x':
+            fPrecompute ^= 1;
+            break;
+        case 'z':
+            fUseZeros ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'w':
+            fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( argc != globalUtilOptind + 1 )
+    {
+        goto usage;
+    }
+
+    // get the input file name
+    simFileName = argv[globalUtilOptind];
+    if ( (pFile = fopen( simFileName, "r" )) == NULL )
+    {
+        Abc_Print( -1, "Cannot open input file \"%s\". ", simFileName );
+        if ( (simFileName = Extra_FileGetSimilarName( simFileName, ".mv", ".blif", ".pla", ".eqn", ".bench" )) )
+            Abc_Print( 1, "Did you mean \"%s\"?", simFileName );
+        Abc_Print( 1, "\n" );
+        return 1;
+    }
+    fclose(pFile);
+
+    if ( fPrecompute )
+    {
+        Rwr_Precompute();
+        return 0;
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
+        return 1;
+    }
+    if ( Abc_NtkGetChoiceNum(pNtk) )
+    {
+        Abc_Print( -1, "AIG resynthesis cannot be applied to AIGs with choice nodes.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    if ( !ntkRewrite( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable, simFileName ) )
+    {
+        Abc_Print( -1, "Rewriting has failed.\n" );
+        return 1;
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: aigrewrite [-lzvwh] <file>\n" );
+    Abc_Print( -2, "\t         performs technology-independent rewriting of the AIG utilizing external care set\n" );
+    Abc_Print( -2, "\t         modified from command rewrite\n" );
+    Abc_Print( -2, "\t-l     : toggle preserving the number of levels [default = %s]\n", fUpdateLevel? "yes": "no" );
+    Abc_Print( -2, "\t-z     : toggle using zero-cost replacements [default = %s]\n", fUseZeros? "yes": "no" );
+    Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w     : toggle printout subgraph statistics [default = %s]\n", fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    Abc_Print( -2, "\t<file> : file with the given patterns\n");
+    return 1;
+}
+
 static int checkesp_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -667,6 +778,7 @@ static int readplabatch_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     return result;
 }
 
+/*
 static int bddminimize_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -843,6 +955,7 @@ usage:
     Abc_Print( -2, "\t-h            : print the command usage\n" );
     return 1;   
 }
+*/
 
 // called during ABC startup
 static void init(Abc_Frame_t* pAbc)
@@ -852,8 +965,9 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "aigrewrite", aigRewrite_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
-    Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
+//    Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "readplabatch", readplabatch_Command, 1); // helper
 }
 

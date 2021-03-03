@@ -1,6 +1,28 @@
 #include "icompact.h"
+#include "opt/rwr/rwr.h" // ntkRewrite
+#include "bool/dec/dec.h" // ntkRewrite
+#include "opt/cut/cutInt.h"
 
 ABC_NAMESPACE_IMPL_START
+
+/////////////////////////////////////////////////////////
+// Aux Functions
+/////////////////////////////////////////////////////////
+// print in binary
+void printBits(size_t const size, void const * const ptr)
+{
+    unsigned char *b = (unsigned char*) ptr;
+    unsigned char byte;
+    int i, j;
+    
+    for (i = size-1; i >= 0; i--) {
+        for (j = 7; j >= 0; j--) {
+            byte = (b[i] >> j) & 1;
+            printf("%u", byte);
+        }
+    }
+    puts("");
+}
 
 // returns the number of input variables used in the cubes of the pla
 int espresso_input_count(char* filename)
@@ -82,6 +104,7 @@ char ** setDummyNames(int len, char * baseStr)
     return result;
 }
 
+// check if two bits are complement
 bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
 {
     char iBit, oBit;
@@ -98,7 +121,10 @@ bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
     return (iBit != oBit);
 }
 
+/////////////////////////////////////////////////////////
+// Network Verify
 // returns 1 if all sim pat are correct, 0 otherwise, -1 if failed
+/////////////////////////////////////////////////////////
 int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
 {
     int result;
@@ -142,6 +168,10 @@ int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
     return result;
 }
 
+/////////////////////////////////////////////////////////
+// Network Append
+// fAllPos set to 1 ( = 0 causes unresolved error ). Warnings in Abc_NtkCompareSignals() removed
+/////////////////////////////////////////////////////////
 // modified from base/abc/abcCheck.c Abc_NtkComparePis()
 int ntkComparePis( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2, int fComb )
 {
@@ -176,7 +206,6 @@ int ntkCompareSignals( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2, int fComb )
 }
 
 // modified from base/abci/abcStrash.c Abc_NtkAppend()
-// fAllPos set to 1 ( = 0 causes unresolved error ). Warnings in Abc_NtkCompareSignals() removed.
 int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2)
 {
     Abc_Obj_t * pObj;
@@ -229,6 +258,9 @@ int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2)
     return 1;
 }
 
+/////////////////////////////////////////////////////////
+// Network STF Insertion
+/////////////////////////////////////////////////////////
 void removeSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, int> >& vFanout, int signal)
 {
     Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, * pTmp;
@@ -338,6 +370,7 @@ void insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
 
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
 {
+    extern int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj;
@@ -410,6 +443,9 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
     return pNtkNew;
 }
 
+/////////////////////////////////////////////////////////
+// Network Signal Merging
+/////////////////////////////////////////////////////////
 void signalUnMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector< pair<Aig_Obj_t*, int> >& vFanout)
 {
     Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, * pTmp;
@@ -520,6 +556,7 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
 
 Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
 {
+    extern int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj1, * pObj2;
@@ -595,6 +632,687 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
     Aig_ManFanoutStop(pAig);
     Aig_ManStop(pAig);
     return pNtkNew;
+}
+
+/////////////////////////////////////////////////////////
+// Rewrite
+// Modified from abcRewrite.c to support 1. external careset 
+/////////////////////////////////////////////////////////
+/*== bool/dec/decAbc.c ==*/
+extern "C" { void Dec_GraphUpdateNetwork( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int fUpdateLevel, int nGain ); }
+extern "C" { int Dec_GraphToNetworkCount( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int NodeMax, int LevelMax ); }
+/*== aig/aig/aigCanon.c ==*/
+extern "C" { void Aig_RManRecord( unsigned * pTruth, int nVarsInit ); }
+
+void cutComputeCareset(int Node, Cut_Cut_t * pCut, Fra_Sml_t * pSim)
+{
+    // icompactGencareset.cpp
+    extern unsigned int* simFlipOneNode( Fra_Sml_t * p, int Node);
+    
+    // only compute careset for cuts w/ nLeaves = 4
+    if(Cut_CutReadLeaveNum(pCut) != 4)
+        return;
+
+    unsigned int uCare = 0;
+    unsigned int * uAlter;
+    int patClass[(pSim->nWordsFrame << 5)] = {0}; // class for each pattern wrt the cut 
+
+    // get patClass (SDC)
+    for(int k=0; k<(pSim->nWordsFrame << 5); k++)
+    {
+        int uTruth = 0;
+        for(int n=0; n<4; n++)
+        {
+            if(Abc_InfoHasBit(Fra_ObjSim( pSim, Cut_CutReadLeaves(pCut)[n] ), k))
+                uTruth |= (1 << n);
+        }
+        patClass[k] = uTruth;
+    }
+
+    // check ODC (care if any pattern in such class alters the output when flipped)
+    uAlter = simFlipOneNode(pSim, Node);
+
+    for(int k=0; k<(pSim->nWordsFrame << 5); k++)
+    {
+        if(Abc_InfoHasBit(uAlter, k))
+            uCare |= (1<<patClass[k]);
+    }
+    pCut->uCare = uCare;
+}
+
+int Cut_NodeMapping( Cut_Man_t * p, Cut_Cut_t * pCuts, int Node, int Node0, int Node1 )
+{
+    Cut_Cut_t * pCut0, * pCut1, * pCut;
+    int Delay0, Delay1, Delay;
+    // get the fanin cuts
+    Delay0 = Vec_IntEntry( p->vDelays2, Node0 );
+    Delay1 = Vec_IntEntry( p->vDelays2, Node1 );
+    pCut0 = (Delay0 == 0) ? (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node0 ) : (Cut_Cut_t *)Vec_PtrEntry( p->vCutsMax, Node0 );
+    pCut1 = (Delay1 == 0) ? (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node1 ) : (Cut_Cut_t *)Vec_PtrEntry( p->vCutsMax, Node1 );
+    if ( Delay0 == Delay1 )
+        Delay = (Delay0 == 0) ? Delay0 + 1: Delay0;
+    else if ( Delay0 > Delay1 )
+    {
+        Delay = Delay0;
+        pCut1 = (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node1 );
+        assert( pCut1->nLeaves == 1 );
+    }
+    else // if ( Delay0 < Delay1 )
+    {
+        Delay = Delay1;
+        pCut0 = (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node0 );
+        assert( pCut0->nLeaves == 1 );
+    }
+    // merge the cuts
+    if ( pCut0->nLeaves < pCut1->nLeaves )
+        pCut  = Cut_CutMergeTwo( p, pCut1, pCut0 );
+    else
+        pCut  = Cut_CutMergeTwo( p, pCut0, pCut1 );
+    if ( pCut == NULL )
+    {
+        Delay++;
+        pCut = Cut_CutAlloc( p );
+        pCut->nLeaves = 2;
+        pCut->pLeaves[0] = Node0 < Node1 ? Node0 : Node1;
+        pCut->pLeaves[1] = Node0 < Node1 ? Node1 : Node0;
+    }
+    assert( Delay > 0 );
+    Vec_IntWriteEntry( p->vDelays2, Node, Delay );
+    Vec_PtrWriteEntry( p->vCutsMax, Node, pCut );
+    if ( p->nDelayMin < Delay )
+        p->nDelayMin = Delay;
+    return Delay;
+}
+
+Cut_Cut_t * nodeComputeCuts( Cut_Man_t * p, int Node, int Node0, int Node1, int fCompl0, int fCompl1, int fTriv, int TreeCode, Fra_Sml_t * pSim )
+{
+    Cut_List_t Super, * pSuper = &Super;
+    Cut_Cut_t * pList, * pCut;
+    abctime clk;
+    // start the number of cuts at the node
+    p->nNodes++;
+    p->nNodeCuts = 0;
+    // prepare information for recording
+    if ( p->pParams->fRecord )
+    {
+        Cut_CutNumberList( Cut_NodeReadCutsNew(p, Node0) );
+        Cut_CutNumberList( Cut_NodeReadCutsNew(p, Node1) );
+    }
+    // compute the cuts
+clk = Abc_Clock();
+    Cut_ListStart( pSuper );
+    Cut_NodeDoComputeCuts( p, pSuper, Node, fCompl0, fCompl1, Cut_NodeReadCutsNew(p, Node0), Cut_NodeReadCutsNew(p, Node1), fTriv, TreeCode );
+    pList = Cut_ListFinish( pSuper );
+p->timeMerge += Abc_Clock() - clk;
+    // verify the result of cut computation
+//    Cut_CutListVerify( pList );
+    // compute careset for each cut
+    Cut_ListForEachCut( pList, pCut )
+    {
+printf("  compute careset for cut\n");
+        cutComputeCareset(Node, pCut, pSim); // Node = node ID instead of p->pAig ID
+// printf("    uTruth: "); printBits(sizeof(unsigned), Cut_CutReadTruth(pCut));
+printf("    uCare : "); printBits(sizeof(pCut->uCare), &pCut->uCare);
+    }
+        
+    // performing the recording
+    if ( p->pParams->fRecord )
+    {
+        Vec_IntWriteEntry( p->vNodeStarts, Node, Vec_IntSize(p->vCutPairs) );
+        Cut_ListForEachCut( pList, pCut )
+            Vec_IntPush( p->vCutPairs, ((pCut->Num1 << 16) | pCut->Num0) );
+        Vec_IntWriteEntry( p->vNodeCuts, Node, Vec_IntSize(p->vCutPairs) - Vec_IntEntry(p->vNodeStarts, Node) );
+    }
+    if ( p->pParams->fRecordAig )
+    {
+        Cut_ListForEachCut( pList, pCut )
+            if ( Cut_CutReadLeaveNum(pCut) > 4 )
+                Aig_RManRecord( Cut_CutReadTruth(pCut), Cut_CutReadLeaveNum(pCut) );
+    }
+    // check if the node is over the list
+    if ( p->nNodeCuts == p->pParams->nKeepMax )
+        p->nCutsLimit++;
+    // set the list at the node
+    Vec_PtrFillExtra( p->vCutsNew, Node + 1, NULL );
+    assert( Cut_NodeReadCutsNew(p, Node) == NULL );
+    /////
+//    pList->pNext = NULL;
+    /////
+    Cut_NodeWriteCutsNew( p, Node, pList );
+    // filter the cuts
+//clk = Abc_Clock();
+//    if ( p->pParams->fFilter )
+//        Cut_CutFilter( p, pList0 );
+//p->timeFilter += Abc_Clock() - clk;
+    // perform mapping of this node with these cuts
+clk = Abc_Clock();
+    if ( p->pParams->fMap && !p->pParams->fSeq )
+    {
+//        int Delay1, Delay2;
+//        Delay1 = Cut_NodeMapping( p, pList, Node, Node0, Node1 );    
+//        Delay2 = Cut_NodeMapping2( p, pList, Node, Node0, Node1 );   
+//        assert( Delay1 >= Delay2 );
+        Cut_NodeMapping( p, pList, Node, Node0, Node1 );
+    }
+p->timeMap += Abc_Clock() - clk;
+    return pList;
+}
+
+void * nodeGetCuts( void * p, Abc_Obj_t * pObj, int fDag, int fTree, Fra_Sml_t * pSim )
+{
+    Abc_Obj_t * pFanin;
+    int fDagNode, fTriv, TreeCode = 0;
+//    assert( Abc_NtkIsStrash(pObj->pNtk) );
+    assert( Abc_ObjFaninNum(pObj) == 2 );
+
+    // check if the node is a DAG node
+    fDagNode = (Abc_ObjFanoutNum(pObj) > 1 && !Abc_NodeIsMuxControlType(pObj));
+    // increment the counter of DAG nodes
+    if ( fDagNode ) Cut_ManIncrementDagNodes( (Cut_Man_t *)p );
+    // add the trivial cut if the node is a DAG node, or if we compute all cuts
+    fTriv = fDagNode || !fDag;
+    // check if fanins are DAG nodes
+    if ( fTree )
+    {
+        pFanin = Abc_ObjFanin0(pObj);
+        TreeCode |=  (Abc_ObjFanoutNum(pFanin) > 1 && !Abc_NodeIsMuxControlType(pFanin));
+        pFanin = Abc_ObjFanin1(pObj);
+        TreeCode |= ((Abc_ObjFanoutNum(pFanin) > 1 && !Abc_NodeIsMuxControlType(pFanin)) << 1);
+    }
+
+    // changes due to the global/local cut computation
+    {
+        Cut_Params_t * pParams = Cut_ManReadParams((Cut_Man_t *)p);
+        if ( pParams->fLocal )
+        {
+            Vec_Int_t * vNodeAttrs = Cut_ManReadNodeAttrs((Cut_Man_t *)p);
+            fDagNode = Vec_IntEntry( vNodeAttrs, pObj->Id );
+            if ( fDagNode ) Cut_ManIncrementDagNodes( (Cut_Man_t *)p );
+//            fTriv = fDagNode || !pParams->fGlobal;
+            fTriv = !Vec_IntEntry( vNodeAttrs, pObj->Id );
+            TreeCode = 0;
+            pFanin = Abc_ObjFanin0(pObj);
+            TreeCode |=  Vec_IntEntry( vNodeAttrs, pFanin->Id );
+            pFanin = Abc_ObjFanin1(pObj);
+            TreeCode |= (Vec_IntEntry( vNodeAttrs, pFanin->Id ) << 1);
+        }
+    }
+    return nodeComputeCuts( (Cut_Man_t *)p, pObj->Id, Abc_ObjFaninId0(pObj), Abc_ObjFaninId1(pObj),  
+        Abc_ObjFaninC0(pObj), Abc_ObjFaninC1(pObj), fTriv, TreeCode, pSim );  
+}
+
+void * nodeGetCutsRecursive( void * p, Abc_Obj_t * pObj, int fDag, int fTree, Fra_Sml_t * pSim )
+{
+    void * pList;
+    if ( (pList = Abc_NodeReadCuts( p, pObj )) )
+        return pList;
+    nodeGetCutsRecursive( p, Abc_ObjFanin0(pObj), fDag, fTree, pSim );
+    nodeGetCutsRecursive( p, Abc_ObjFanin1(pObj), fDag, fTree, pSim );
+    return nodeGetCuts( p, pObj, fDag, fTree, pSim );
+}
+
+void enumUTruth(unsigned uLocal, unsigned uCare, Vec_Int_t * pTruth)
+{
+    Vec_Int_t * pRes;
+    int bit, s, e = 0, i;
+
+    pRes = Vec_IntStart(0);
+    Vec_IntPush(pRes, uLocal);
+    
+    for(bit=0; bit<16; bit++)
+    {
+        if( (uCare >> bit)%2 == 0)
+        {
+            s = Vec_IntSize(pRes);
+            Vec_IntForEachEntryStop(pRes, e, i, s)
+            {
+                Vec_IntPush(pRes, (unsigned)e);
+                Vec_IntPush(pRes, (unsigned)e ^ (1<<bit));
+            }
+        }
+    }
+    Vec_IntClear(pTruth);
+    Vec_IntAppend(pTruth, pRes);
+    Vec_IntFree(pRes);
+}
+
+Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, Vec_Ptr_t * vFaninsCur, int nNodesSaved, int LevelMax, int * pGainBest, int fPlaceEnable, unsigned uTruth )
+{
+    Vec_Ptr_t * vSubgraphs;
+    Dec_Graph_t * pGraphBest = NULL; // Suppress "might be used uninitialized"
+    Dec_Graph_t * pGraphCur;
+    Rwr_Node_t * pNode, * pFanin;
+    int nNodesAdded, GainBest, i, k;
+    float CostBest;//, CostCur;
+    // find the matching class of subgraphs
+    vSubgraphs = Vec_VecEntry( p->vClasses, p->pMap[uTruth] );
+    p->nSubgraphs += vSubgraphs->nSize;
+    // determine the best subgraph
+    GainBest = -1;
+    CostBest = ABC_INFINITY;
+    Vec_PtrForEachEntry( Rwr_Node_t *, vSubgraphs, pNode, i )
+    {
+        // get the current graph
+        pGraphCur = (Dec_Graph_t *)pNode->pNext;
+        // copy the leaves
+        Vec_PtrForEachEntry( Rwr_Node_t *, vFaninsCur, pFanin, k )
+            Dec_GraphNode(pGraphCur, k)->pFunc = pFanin;
+        // detect how many unlabeled nodes will be reused
+        nNodesAdded = Dec_GraphToNetworkCount( pRoot, pGraphCur, nNodesSaved, LevelMax );
+        if ( nNodesAdded == -1 )
+            continue;
+        assert( nNodesSaved >= nNodesAdded );
+/*
+        // evaluate the cut
+        if ( fPlaceEnable )
+        {
+            extern float Abc_PlaceEvaluateCut( Abc_Obj_t * pRoot, Vec_Ptr_t * vFanins );
+
+            float Alpha = 0.5; // ???
+            float PlaceCost;
+
+            // get the placement cost of the cut
+            PlaceCost = Abc_PlaceEvaluateCut( pRoot, vFaninsCur );
+
+            // get the weigted cost of the cut
+            CostCur = nNodesSaved - nNodesAdded + Alpha * PlaceCost;
+
+            // do not allow uphill moves
+            if ( nNodesSaved - nNodesAdded < 0 )
+                continue;
+
+            // decide what cut to use
+            if ( CostBest > CostCur )
+            {
+                GainBest   = nNodesSaved - nNodesAdded; // pure node cost
+                CostBest   = CostCur;                   // cost with placement
+                pGraphBest = pGraphCur;                 // subgraph to be used for rewriting
+
+                // score the graph
+                if ( nNodesSaved - nNodesAdded > 0 )
+                {
+                    pNode->nScore++;
+                    pNode->nGain += GainBest;
+                    pNode->nAdded += nNodesAdded;
+                }
+            }
+        }
+        else
+*/
+        {
+            // count the gain at this node
+            if ( GainBest < nNodesSaved - nNodesAdded )
+            {
+                GainBest   = nNodesSaved - nNodesAdded;
+                pGraphBest = pGraphCur;
+
+                // score the graph
+                if ( nNodesSaved - nNodesAdded > 0 )
+                {
+                    pNode->nScore++;
+                    pNode->nGain += GainBest;
+                    pNode->nAdded += nNodesAdded;
+                }
+            }
+        }
+    }
+    if ( GainBest == -1 )
+        return NULL;
+    *pGainBest = GainBest;
+    return pGraphBest;
+}
+
+int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim )
+{
+printf("Start rewriting node %i\n", Abc_ObjId(pNode));
+    
+    int fVeryVerbose = 0;
+    Dec_Graph_t * pGraph;
+    Cut_Cut_t * pCut;//, * pTemp;
+    Abc_Obj_t * pFanin;
+    unsigned uPhase;
+    unsigned uTruthBest = 0; // Suppress "might be used uninitialized"
+    unsigned uLocal, uCare, uTruth;
+    Vec_Int_t * pTruth = Vec_IntStart(0), * pClass = Vec_IntStart(0);
+    char * pPerm;
+    int Required, nNodesSaved;
+    int nNodesSaveCur = -1; // Suppress "might be used uninitialized"
+    int i, GainCur = -1, GainBest = -1;
+    abctime clk, clk2;//, Counter;
+
+    p->nNodesConsidered++;
+    // get the required times
+    Required = fUpdateLevel? Abc_ObjRequiredLevel(pNode) : ABC_INFINITY;
+
+    // get the node's cuts
+clk = Abc_Clock();
+    pCut = (Cut_Cut_t *)nodeGetCutsRecursive( pManCut, pNode, 0, 0, pSim );
+    assert( pCut != NULL );
+p->timeCut += Abc_Clock() - clk;
+
+//printf( " %d", Rwr_CutCountNumNodes(pNode, pCut) );
+/*
+    Counter = 0;
+    for ( pTemp = pCut->pNext; pTemp; pTemp = pTemp->pNext )
+        Counter++;
+    printf( "%d ", Counter );
+*/
+    // go through the cuts
+clk = Abc_Clock();
+    for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
+    {
+        // consider only 4-input cuts
+        if ( pCut->nLeaves < 4 )
+            continue;
+//            Cut_CutPrint( pCut, 0 ), printf( "\n" );
+
+        // get the fanin permutation, modified to support external care set enum
+        uLocal = 0xFFFF & *Cut_CutReadTruth(pCut);
+        uCare = pCut->uCare;
+        enumUTruth(uLocal, uCare, pTruth);
+        Vec_IntForEachEntry(pTruth, uTruth, i)
+        {
+            if(Vec_IntFind(pClass, p->pMap[uTruth]) != -1)
+                continue;
+            Vec_IntPush(pClass, p->pMap[uTruth]);
+            
+            pPerm = p->pPerms4[ (int)p->pPerms[uTruth] ];
+            uPhase = p->pPhases[uTruth];
+            // collect fanins with the corresponding permutation/phase
+            Vec_PtrClear( p->vFaninsCur );
+            Vec_PtrFill( p->vFaninsCur, (int)pCut->nLeaves, 0 );
+            for ( i = 0; i < (int)pCut->nLeaves; i++ )
+            {
+                pFanin = Abc_NtkObj( pNode->pNtk, pCut->pLeaves[(int)pPerm[i]] );
+                if ( pFanin == NULL )
+                    break;
+                pFanin = Abc_ObjNotCond(pFanin, ((uPhase & (1<<i)) > 0) );
+                Vec_PtrWriteEntry( p->vFaninsCur, i, pFanin );
+            }
+            if ( i != (int)pCut->nLeaves )
+            {
+                p->nCutsBad++;
+                continue;
+            }
+            p->nCutsGood++;
+
+            {
+                int Counter = 0;
+                Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+                    if ( Abc_ObjFanoutNum(Abc_ObjRegular(pFanin)) == 1 )
+                        Counter++;
+                if ( Counter > 2 )
+                    continue;
+            }
+clk2 = Abc_Clock();
+
+            // mark the fanin boundary 
+            Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+                Abc_ObjRegular(pFanin)->vFanouts.nSize++;
+
+            // label MFFC with current ID
+            Abc_NtkIncrementTravId( pNode->pNtk );
+            nNodesSaved = Abc_NodeMffcLabelAig( pNode );
+            // unmark the fanin boundary
+            Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+                Abc_ObjRegular(pFanin)->vFanouts.nSize--;
+p->timeMffc += Abc_Clock() - clk2;
+
+            // evaluate the cut
+clk2 = Abc_Clock();
+            pGraph = cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth );
+p->timeEval += Abc_Clock() - clk2;
+
+            // check if the cut is better than the current best one
+            if ( pGraph != NULL && GainBest < GainCur )
+            {
+                // save this form
+                nNodesSaveCur = nNodesSaved;
+                GainBest  = GainCur;
+                p->pGraph  = pGraph;
+                p->fCompl = ((uPhase & (1<<4)) > 0);
+                uTruthBest = uTruth;
+                // collect fanins in the
+                Vec_PtrClear( p->vFanins );
+                Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+                    Vec_PtrPush( p->vFanins, pFanin );
+            }
+        }   
+    }
+p->timeRes += Abc_Clock() - clk;
+
+    if ( GainBest == -1 )
+        return -1;
+/*
+    if ( GainBest > 0 )
+    {
+        printf( "Class %d  ", p->pMap[uTruthBest] );
+        printf( "Gain = %d. Node %d : ", GainBest, pNode->Id );
+        Vec_PtrForEachEntry( Abc_Obj_t *, p->vFanins, pFanin, i )
+            printf( "%d ", Abc_ObjRegular(pFanin)->Id );
+        Dec_GraphPrint( stdout, p->pGraph, NULL, NULL );
+        printf( "\n" );
+    }
+*/
+
+//    printf( "%d", nNodesSaveCur - GainBest );
+/*
+    if ( GainBest > 0 )
+    {
+        if ( Rwr_CutIsBoolean( pNode, p->vFanins ) )
+            printf( "b" );
+        else
+        {
+            printf( "Node %d : ", pNode->Id );
+            Vec_PtrForEachEntry( Abc_Obj_t *, p->vFanins, pFanin, i )
+                printf( "%d ", Abc_ObjRegular(pFanin)->Id );
+            printf( "a" );
+        }
+    }
+*/
+/*
+    if ( GainBest > 0 )
+        if ( p->fCompl )
+            printf( "c" );
+        else
+            printf( "." );
+*/
+
+    // copy the leaves
+    Vec_PtrForEachEntry( Abc_Obj_t *, p->vFanins, pFanin, i )
+        Dec_GraphNode((Dec_Graph_t *)p->pGraph, i)->pFunc = pFanin;
+/*
+    printf( "(" );
+    Vec_PtrForEachEntry( Abc_Obj_t *, p->vFanins, pFanin, i )
+        printf( " %d", Abc_ObjRegular(pFanin)->vFanouts.nSize - 1 );
+    printf( " )  " );
+*/
+//    printf( "%d ", Rwr_NodeGetDepth_rec( pNode, p->vFanins ) );
+
+    p->nScores[p->pMap[uTruthBest]]++;
+    p->nNodesGained += GainBest;
+    if ( fUseZeros || GainBest > 0 )
+    {
+        p->nNodesRewritten++;
+    }
+
+    // report the progress
+    if ( fVeryVerbose && GainBest > 0 )
+    {
+        printf( "Node %6s :   ", Abc_ObjName(pNode) );
+        printf( "Fanins = %d. ", p->vFanins->nSize );
+        printf( "Save = %d.  ", nNodesSaveCur );
+        printf( "Add = %d.  ",  nNodesSaveCur-GainBest );
+        printf( "GAIN = %d.  ", GainBest );
+        printf( "Cone = %d.  ", p->pGraph? Dec_GraphNodeNum((Dec_Graph_t *)p->pGraph) : 0 );
+        printf( "Class = %d.  ", p->pMap[uTruthBest] );
+        printf( "\n" );
+    }
+    Vec_IntFree(pTruth);
+    Vec_IntFree(pClass);
+    return GainBest;
+}
+
+Cut_Man_t * Abc_NtkStartCutManForRewrite( Abc_Ntk_t * pNtk )
+{
+    static Cut_Params_t Params, * pParams = &Params;
+    Cut_Man_t * pManCut;
+    Abc_Obj_t * pObj;
+    int i;
+    // start the cut manager
+    memset( pParams, 0, sizeof(Cut_Params_t) );
+    pParams->nVarsMax  = 4;     // the max cut size ("k" of the k-feasible cuts)
+    pParams->nKeepMax  = 250;   // the max number of cuts kept at a node
+    pParams->fTruth    = 1;     // compute truth tables
+    pParams->fFilter   = 1;     // filter dominated cuts
+    pParams->fSeq      = 0;     // compute sequential cuts
+    pParams->fDrop     = 0;     // drop cuts on the fly
+    pParams->fVerbose  = 0;     // the verbosiness flag
+    pParams->nIdsMax   = Abc_NtkObjNumMax( pNtk );
+    pManCut = Cut_ManStart( pParams );
+    if ( pParams->fDrop )
+        Cut_ManSetFanoutCounts( pManCut, Abc_NtkFanoutCounts(pNtk) );
+    // set cuts for PIs
+    Abc_NtkForEachCi( pNtk, pObj, i )
+        if ( Abc_ObjFanoutNum(pObj) > 0 )
+            Cut_NodeSetTriv( pManCut, pObj->Id );
+    return pManCut;
+}
+
+int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName )
+{
+    ProgressBar * pProgress;
+    Cut_Man_t * pManCut;
+    Rwr_Man_t * pManRwr;
+    Abc_Obj_t * pNode;
+//    Vec_Ptr_t * vAddedCells = NULL, * vUpdatedNets = NULL;
+    Dec_Graph_t * pGraph;
+    int i, nNodes, nGain, fCompl;
+    abctime clk, clkStart = Abc_Clock();
+    Fra_Sml_t * pSim; // sim mgr for careset computation
+
+    assert( Abc_NtkIsStrash(pNtk) );
+    // cleanup the AIG
+    Abc_AigCleanup((Abc_Aig_t *)pNtk->pManFunc);
+/*
+    {
+        Vec_Vec_t * vParts;
+        vParts = Abc_NtkPartitionSmart( pNtk, 50, 1 );
+        Vec_VecFree( vParts );
+    }
+*/
+
+    // start placement package
+//    if ( fPlaceEnable )
+//    {
+//        Abc_PlaceBegin( pNtk );
+//        vAddedCells = Abc_AigUpdateStart( pNtk->pManFunc, &vUpdatedNets );
+//    }
+
+    // start the rewriting manager
+    pManRwr = Rwr_ManStart( 0 );
+    if ( pManRwr == NULL )
+        return 0;
+    // compute the reverse levels if level update is requested
+    if ( fUpdateLevel )
+        Abc_NtkStartReverseLevels( pNtk, 0 );
+    // start the cut manager
+clk = Abc_Clock();
+    pManCut = Abc_NtkStartCutManForRewrite( pNtk );
+Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
+    pNtk->pManCut = pManCut;
+
+    // start the simulation mgr for careset computation
+    pSim = smlSimulateStart(pNtk, simFileName); 
+
+    if ( fVeryVerbose )
+        Rwr_ScoresClean( pManRwr );
+
+    // resynthesize each node once
+    pManRwr->nNodesBeg = Abc_NtkNodeNum(pNtk);
+    nNodes = Abc_NtkObjNumMax(pNtk);
+    pProgress = Extra_ProgressBarStart( stdout, nNodes );
+    Abc_NtkForEachNode( pNtk, pNode, i )
+    {
+        Extra_ProgressBarUpdate( pProgress, i, NULL );
+        // stop if all nodes have been tried once
+        if ( i >= nNodes )
+            break;
+        // skip persistant nodes
+        if ( Abc_NodeIsPersistant(pNode) )
+            continue;
+        // skip the nodes with many fanouts
+        if ( Abc_ObjFanoutNum(pNode) > 1000 )
+            continue;
+
+        // for each cut, try to resynthesize it
+        nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim );
+        if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
+            continue;
+        // if we end up here, a rewriting step is accepted
+
+        // get hold of the new subgraph to be added to the AIG
+        pGraph = (Dec_Graph_t *)Rwr_ManReadDecs(pManRwr);
+        fCompl = Rwr_ManReadCompl(pManRwr);
+
+        // reset the array of the changed nodes
+//         if ( fPlaceEnable )
+//             Abc_AigUpdateReset( (Abc_Aig_t *)pNtk->pManFunc );
+
+        // complement the FF if needed
+        if ( fCompl ) Dec_GraphComplement( pGraph );
+clk = Abc_Clock();
+        Dec_GraphUpdateNetwork( pNode, pGraph, fUpdateLevel, nGain );
+Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
+        if ( fCompl ) Dec_GraphComplement( pGraph );
+
+        // use the array of changed nodes to update placement
+//        if ( fPlaceEnable )
+//            Abc_PlaceUpdate( vAddedCells, vUpdatedNets );
+
+        // update simulation mgr
+        smlSimulateIncremental( pSim, pManRwr->vFanins);// vFanins carries Abc_Obj_t* instead of Aig_Node_t*
+    }
+    Extra_ProgressBarStop( pProgress );
+Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
+    // print stats
+    pManRwr->nNodesEnd = Abc_NtkNodeNum(pNtk);
+    if ( fVerbose )
+        Rwr_ManPrintStats( pManRwr );
+//        Rwr_ManPrintStatsFile( pManRwr );
+    if ( fVeryVerbose )
+        Rwr_ScoresReport( pManRwr );
+    // delete the managers
+    Rwr_ManStop( pManRwr );
+    Cut_ManStop( pManCut );
+    pNtk->pManCut = NULL;
+
+    // start placement package
+//    if ( fPlaceEnable )
+//    {
+//        Abc_PlaceEnd( pNtk );
+//        Abc_AigUpdateStop( pNtk->pManFunc );
+//    }
+
+    // put the nodes into the DFS order and reassign their IDs
+    {
+//        abctime clk = Abc_Clock();
+    Abc_NtkReassignIds( pNtk );
+//        ABC_PRT( "time", Abc_Clock() - clk );
+    }
+//    Abc_AigCheckFaninOrder( pNtk->pManFunc );
+    // fix the levels
+    if ( fUpdateLevel )
+        Abc_NtkStopReverseLevels( pNtk );
+    else
+        Abc_NtkLevel( pNtk );
+    // check
+    if ( !Abc_NtkCheck( pNtk ) )
+    {
+        printf( "Abc_NtkRewrite: The network check has failed.\n" );
+        return 0;
+    }
+    return 1;
 }
 
 ABC_NAMESPACE_IMPL_END

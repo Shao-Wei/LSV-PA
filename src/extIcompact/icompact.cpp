@@ -826,6 +826,9 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
 
 Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge)
 {
+    // icompactUtil.cpp
+    extern bool singleSupportComplement(char * pFileName, int piIdx, int poIdx);
+    
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;
     char * caresetFileName = "tmp.careset.pla";
@@ -909,6 +912,9 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
 
 Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge)
 {
+    // icompactUtil.cpp
+    extern bool singleSupportComplement(char * pFileName, int piIdx, int poIdx);
+
     bool check;
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;

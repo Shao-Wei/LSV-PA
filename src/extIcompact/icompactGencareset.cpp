@@ -1,7 +1,6 @@
 #include "icompact.h"
 #include <stdlib.h> // rand()
 #include <sstream> // int to string
-#include "proof/fra/fra.h"
 
 ABC_NAMESPACE_IMPL_START
 
@@ -14,6 +13,10 @@ extern "C" { Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters
 /*== proof/fra/fraSim.c ==*/
 extern "C" { Vec_Str_t * Fra_SmlSimulateReadFile( char * pFileName ); }
 extern "C" { void Fra_SmlSimulateOne( Fra_Sml_t * p ); }
+extern "C" { void Fra_SmlNodeSimulate( Fra_Sml_t * p, Aig_Obj_t * pObj, int iFrame ); }
+extern "C" {void Fra_SmlNodeCopyFanin( Fra_Sml_t * p, Aig_Obj_t * pObj, int iFrame ); }
+/*== aig/aig/aigDfs.c ==*/
+extern "C" { void Aig_ManDfsReverse_rec( Aig_Man_t * p, Aig_Obj_t * pObj, Vec_Ptr_t * vNodes ); }
 
 int smlWriteGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, char* pfilename)
 {
@@ -153,6 +156,115 @@ void smlInitializeGiven( Fra_Sml_t * p, Vec_Str_t * vSimInfo )
                 Abc_InfoSetBit( pSims, k );
         */
     }
+}
+
+// for external use
+Fra_Sml_t * smlSimulateStart( Abc_Ntk_t* pNtk, char * pFileName)
+{
+    Vec_Str_t * vSimInfo;
+    Fra_Sml_t * p = NULL;
+    int nPatterns;
+    int patLen;
+    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
+
+    vSimInfo = smlSimulateReadFile( pFileName, 5 );
+    if ( vSimInfo == NULL )
+        return NULL;
+
+    patLen = Aig_ManCiNum(pAig)+Aig_ManCoNum(pAig);
+    if ( Vec_StrSize(vSimInfo) % patLen != 0 )
+    {
+        printf( "vSimInfo: The number of binary digits (%d) is not divisible by the number of pi (%d) + po (%d).\n", 
+            Vec_StrSize(vSimInfo), Aig_ManCiNum(pAig), Aig_ManCoNum(pAig) );
+        return NULL;
+    }
+
+    nPatterns = Vec_StrSize(vSimInfo) / patLen;
+    p = Fra_SmlStart( pAig, 0, 1, Abc_BitWordNum(nPatterns) );
+    Aig_ManFanoutStart(p->pAig);
+    smlInitializeGiven( p, vSimInfo );
+    Fra_SmlSimulateOne( p );
+
+    Vec_StrFree( vSimInfo );
+    return p;
+}
+
+void smlSimulateStop( Fra_Sml_t * p)
+{
+    Aig_ManFanoutStop(p->pAig);
+    Fra_SmlStop( p );
+}
+
+void smlSimulateIncremental( Fra_Sml_t * p, Vec_Ptr_t * pList)
+{
+    Aig_Man_t * pAig = p->pAig;
+    Vec_Ptr_t * vNodes = Vec_PtrAlloc(0);
+    Aig_Obj_t * pObj;
+    int i;
+    abctime clk;
+clk = Abc_Clock();
+    // collect affected nodes
+    Aig_ManIncrementTravId( pAig );
+    Aig_ManForEachCo( pAig, pObj, i )
+        Aig_ObjSetTravIdCurrent( pAig, pObj );
+    Vec_PtrForEachEntry( Aig_Obj_t *, pList, pObj, i )
+        Aig_ManDfsReverse_rec( pAig, Aig_Regular(pObj), vNodes );
+    // simulate the nodes
+    Vec_PtrForEachEntry(Aig_Obj_t *, vNodes, pObj, i)
+        Fra_SmlNodeSimulate( p, pObj, 0 );
+    // copy simulation info into outputs
+    Aig_ManForEachPoSeq( p->pAig, pObj, i )
+        Fra_SmlNodeCopyFanin( p, pObj, 0 );
+p->timeSim += Abc_Clock() - clk;
+p->nSimRounds++;
+    Vec_PtrFree(vNodes);
+}
+
+void aigFlipNode( Aig_Man_t * pAig, int Node)
+{
+    Aig_Obj_t * pFanout, * pObj = Aig_ManObj(pAig, Node);
+    int iFanout = -1, k;
+    assert(pAig->pFanData);
+    Aig_ObjForEachFanout(pAig, pObj, pFanout, iFanout, k)
+    {     
+        if(Aig_ObjFanin0(pFanout) == Aig_Regular(pObj))
+            Aig_ObjChild0Flip(Aig_Regular(pFanout));
+        else if (Aig_ObjFanin1(pFanout) == Aig_Regular(pObj))
+            Aig_ObjChild1Flip(Aig_Regular(pFanout));
+        else // wrong fanout, collision maybe
+            continue;
+    }
+}
+
+unsigned int* simFlipOneNode( Fra_Sml_t * p, int Node)
+{
+    Aig_Man_t * pAig = p->pAig;
+    Vec_Ptr_t * vList = Vec_PtrAlloc(0);
+    unsigned int * pAlter, * pBuffer[Aig_ManCoNum(pAig)];
+
+    pAlter = new unsigned int[p->nWordsTotal]();
+    for(int k=0; k<Aig_ManCoNum(pAig); k++)
+    {
+        pBuffer[k] = new unsigned int[p->nWordsTotal]();
+        pBuffer[k] = Fra_ObjSim( p, Aig_ObjId(Aig_ManCo(pAig, k)) );
+    }
+    
+    aigFlipNode(pAig, Node);
+    Vec_PtrPush(vList, Aig_Regular(Aig_ManObj(pAig, Node)));
+    smlSimulateIncremental(p, vList);
+
+    for(int k=0; k<Aig_ManCoNum(pAig); k++)
+    {
+        for(int w=0; w<p->nWordsTotal; w++)
+            pBuffer[k][w] ^= Fra_ObjSim( p, Aig_ObjId(Aig_ManCo(pAig, k)) )[w];
+    }
+    for(int k=0; k<Aig_ManCoNum(pAig); k++)
+    {
+        for(int w=0; w<p->nWordsTotal; w++)
+            pAlter[w] &= pBuffer[k][w];
+    }
+    Vec_PtrFree(vList);
+    return pAlter;
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
