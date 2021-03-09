@@ -529,6 +529,12 @@ static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
         Abc_Print( -1, "Rewriting has failed.\n" );
         return 1;
     }
+
+    if(!ntkVerifySamples(Abc_FrameReadNtk(pAbc), simFileName, 0))
+    {
+        Abc_Print( -1, "Verifying has failed.\n" );
+        return 1;
+    }  
     return 0;
 
 usage:

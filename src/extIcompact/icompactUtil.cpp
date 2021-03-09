@@ -641,234 +641,69 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
 /*== bool/dec/decAbc.c ==*/
 extern "C" { void Dec_GraphUpdateNetwork( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int fUpdateLevel, int nGain ); }
 extern "C" { int Dec_GraphToNetworkCount( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int NodeMax, int LevelMax ); }
-/*== aig/aig/aigCanon.c ==*/
-extern "C" { void Aig_RManRecord( unsigned * pTruth, int nVarsInit ); }
 
-void cutComputeCareset(int Node, Cut_Cut_t * pCut, Fra_Sml_t * pSim)
-{
-    // icompactGencareset.cpp
-    extern unsigned int* simFlipOneNode( Fra_Sml_t * p, int Node);
-    
+unsigned int cutComputeCareset(Abc_Obj_t * pObj, Cut_Cut_t * pCut, Fra_Sml_t * pSim, unsigned int * uAlter)
+{    
     // only compute careset for cuts w/ nLeaves = 4
-    if(Cut_CutReadLeaveNum(pCut) != 4)
-        return;
+    if( pCut->nLeaves < 4 )
+        return 0;
 
     unsigned int uCare = 0;
-    unsigned int * uAlter;
+    int uTruth;
+    Aig_Obj_t * leafNodes[4];
     int patClass[(pSim->nWordsFrame << 5)] = {0}; // class for each pattern wrt the cut 
-
+    
+    for(int n=0; n<4; n++)
+        leafNodes[n] = (Aig_Obj_t*)Abc_NtkObj(pObj->pNtk, pCut->pLeaves[n])->pCopy;
     // get patClass (SDC)
     for(int k=0; k<(pSim->nWordsFrame << 5); k++)
     {
-        int uTruth = 0;
+        uTruth = 0;
         for(int n=0; n<4; n++)
         {
-            if(Abc_InfoHasBit(Fra_ObjSim( pSim, Cut_CutReadLeaves(pCut)[n] ), k))
+            if(Abc_InfoHasBit(Fra_ObjSim( pSim, Aig_ObjId(leafNodes[n])), k) ^ Aig_ObjPhase(leafNodes[n])) // must consider node phase
                 uTruth |= (1 << n);
         }
         patClass[k] = uTruth;
     }
-
+// printf("Local patterns: 711 - %i; 1348 - %i; 2213 - %i\n", patClass[711], patClass[1348], patClass[2213]);
+/*
+    int patCount[16] = {0};
+    for(int k=0; k<(pSim->nWordsFrame << 5); k++)
+        patCount[patClass[k]]++;
+    for(int k=0; k<16; k++)
+        printf("%i ", patCount[k]);
+    printf("\n");
+*/      
     // check ODC (care if any pattern in such class alters the output when flipped)
-    uAlter = simFlipOneNode(pSim, Node);
-
     for(int k=0; k<(pSim->nWordsFrame << 5); k++)
     {
         if(Abc_InfoHasBit(uAlter, k))
             uCare |= (1<<patClass[k]);
     }
-    pCut->uCare = uCare;
-}
-
-int Cut_NodeMapping( Cut_Man_t * p, Cut_Cut_t * pCuts, int Node, int Node0, int Node1 )
-{
-    Cut_Cut_t * pCut0, * pCut1, * pCut;
-    int Delay0, Delay1, Delay;
-    // get the fanin cuts
-    Delay0 = Vec_IntEntry( p->vDelays2, Node0 );
-    Delay1 = Vec_IntEntry( p->vDelays2, Node1 );
-    pCut0 = (Delay0 == 0) ? (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node0 ) : (Cut_Cut_t *)Vec_PtrEntry( p->vCutsMax, Node0 );
-    pCut1 = (Delay1 == 0) ? (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node1 ) : (Cut_Cut_t *)Vec_PtrEntry( p->vCutsMax, Node1 );
-    if ( Delay0 == Delay1 )
-        Delay = (Delay0 == 0) ? Delay0 + 1: Delay0;
-    else if ( Delay0 > Delay1 )
-    {
-        Delay = Delay0;
-        pCut1 = (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node1 );
-        assert( pCut1->nLeaves == 1 );
-    }
-    else // if ( Delay0 < Delay1 )
-    {
-        Delay = Delay1;
-        pCut0 = (Cut_Cut_t *)Vec_PtrEntry( p->vCutsNew, Node0 );
-        assert( pCut0->nLeaves == 1 );
-    }
-    // merge the cuts
-    if ( pCut0->nLeaves < pCut1->nLeaves )
-        pCut  = Cut_CutMergeTwo( p, pCut1, pCut0 );
-    else
-        pCut  = Cut_CutMergeTwo( p, pCut0, pCut1 );
-    if ( pCut == NULL )
-    {
-        Delay++;
-        pCut = Cut_CutAlloc( p );
-        pCut->nLeaves = 2;
-        pCut->pLeaves[0] = Node0 < Node1 ? Node0 : Node1;
-        pCut->pLeaves[1] = Node0 < Node1 ? Node1 : Node0;
-    }
-    assert( Delay > 0 );
-    Vec_IntWriteEntry( p->vDelays2, Node, Delay );
-    Vec_PtrWriteEntry( p->vCutsMax, Node, pCut );
-    if ( p->nDelayMin < Delay )
-        p->nDelayMin = Delay;
-    return Delay;
-}
-
-Cut_Cut_t * nodeComputeCuts( Cut_Man_t * p, int Node, int Node0, int Node1, int fCompl0, int fCompl1, int fTriv, int TreeCode, Fra_Sml_t * pSim )
-{
-    Cut_List_t Super, * pSuper = &Super;
-    Cut_Cut_t * pList, * pCut;
-    abctime clk;
-    // start the number of cuts at the node
-    p->nNodes++;
-    p->nNodeCuts = 0;
-    // prepare information for recording
-    if ( p->pParams->fRecord )
-    {
-        Cut_CutNumberList( Cut_NodeReadCutsNew(p, Node0) );
-        Cut_CutNumberList( Cut_NodeReadCutsNew(p, Node1) );
-    }
-    // compute the cuts
-clk = Abc_Clock();
-    Cut_ListStart( pSuper );
-    Cut_NodeDoComputeCuts( p, pSuper, Node, fCompl0, fCompl1, Cut_NodeReadCutsNew(p, Node0), Cut_NodeReadCutsNew(p, Node1), fTriv, TreeCode );
-    pList = Cut_ListFinish( pSuper );
-p->timeMerge += Abc_Clock() - clk;
-    // verify the result of cut computation
-//    Cut_CutListVerify( pList );
-    // compute careset for each cut
-    Cut_ListForEachCut( pList, pCut )
-    {
-printf("  compute careset for cut\n");
-        cutComputeCareset(Node, pCut, pSim); // Node = node ID instead of p->pAig ID
-// printf("    uTruth: "); printBits(sizeof(unsigned), Cut_CutReadTruth(pCut));
-printf("    uCare : "); printBits(sizeof(pCut->uCare), &pCut->uCare);
-    }
-        
-    // performing the recording
-    if ( p->pParams->fRecord )
-    {
-        Vec_IntWriteEntry( p->vNodeStarts, Node, Vec_IntSize(p->vCutPairs) );
-        Cut_ListForEachCut( pList, pCut )
-            Vec_IntPush( p->vCutPairs, ((pCut->Num1 << 16) | pCut->Num0) );
-        Vec_IntWriteEntry( p->vNodeCuts, Node, Vec_IntSize(p->vCutPairs) - Vec_IntEntry(p->vNodeStarts, Node) );
-    }
-    if ( p->pParams->fRecordAig )
-    {
-        Cut_ListForEachCut( pList, pCut )
-            if ( Cut_CutReadLeaveNum(pCut) > 4 )
-                Aig_RManRecord( Cut_CutReadTruth(pCut), Cut_CutReadLeaveNum(pCut) );
-    }
-    // check if the node is over the list
-    if ( p->nNodeCuts == p->pParams->nKeepMax )
-        p->nCutsLimit++;
-    // set the list at the node
-    Vec_PtrFillExtra( p->vCutsNew, Node + 1, NULL );
-    assert( Cut_NodeReadCutsNew(p, Node) == NULL );
-    /////
-//    pList->pNext = NULL;
-    /////
-    Cut_NodeWriteCutsNew( p, Node, pList );
-    // filter the cuts
-//clk = Abc_Clock();
-//    if ( p->pParams->fFilter )
-//        Cut_CutFilter( p, pList0 );
-//p->timeFilter += Abc_Clock() - clk;
-    // perform mapping of this node with these cuts
-clk = Abc_Clock();
-    if ( p->pParams->fMap && !p->pParams->fSeq )
-    {
-//        int Delay1, Delay2;
-//        Delay1 = Cut_NodeMapping( p, pList, Node, Node0, Node1 );    
-//        Delay2 = Cut_NodeMapping2( p, pList, Node, Node0, Node1 );   
-//        assert( Delay1 >= Delay2 );
-        Cut_NodeMapping( p, pList, Node, Node0, Node1 );
-    }
-p->timeMap += Abc_Clock() - clk;
-    return pList;
-}
-
-void * nodeGetCuts( void * p, Abc_Obj_t * pObj, int fDag, int fTree, Fra_Sml_t * pSim )
-{
-    Abc_Obj_t * pFanin;
-    int fDagNode, fTriv, TreeCode = 0;
-//    assert( Abc_NtkIsStrash(pObj->pNtk) );
-    assert( Abc_ObjFaninNum(pObj) == 2 );
-
-    // check if the node is a DAG node
-    fDagNode = (Abc_ObjFanoutNum(pObj) > 1 && !Abc_NodeIsMuxControlType(pObj));
-    // increment the counter of DAG nodes
-    if ( fDagNode ) Cut_ManIncrementDagNodes( (Cut_Man_t *)p );
-    // add the trivial cut if the node is a DAG node, or if we compute all cuts
-    fTriv = fDagNode || !fDag;
-    // check if fanins are DAG nodes
-    if ( fTree )
-    {
-        pFanin = Abc_ObjFanin0(pObj);
-        TreeCode |=  (Abc_ObjFanoutNum(pFanin) > 1 && !Abc_NodeIsMuxControlType(pFanin));
-        pFanin = Abc_ObjFanin1(pObj);
-        TreeCode |= ((Abc_ObjFanoutNum(pFanin) > 1 && !Abc_NodeIsMuxControlType(pFanin)) << 1);
-    }
-
-    // changes due to the global/local cut computation
-    {
-        Cut_Params_t * pParams = Cut_ManReadParams((Cut_Man_t *)p);
-        if ( pParams->fLocal )
-        {
-            Vec_Int_t * vNodeAttrs = Cut_ManReadNodeAttrs((Cut_Man_t *)p);
-            fDagNode = Vec_IntEntry( vNodeAttrs, pObj->Id );
-            if ( fDagNode ) Cut_ManIncrementDagNodes( (Cut_Man_t *)p );
-//            fTriv = fDagNode || !pParams->fGlobal;
-            fTriv = !Vec_IntEntry( vNodeAttrs, pObj->Id );
-            TreeCode = 0;
-            pFanin = Abc_ObjFanin0(pObj);
-            TreeCode |=  Vec_IntEntry( vNodeAttrs, pFanin->Id );
-            pFanin = Abc_ObjFanin1(pObj);
-            TreeCode |= (Vec_IntEntry( vNodeAttrs, pFanin->Id ) << 1);
-        }
-    }
-    return nodeComputeCuts( (Cut_Man_t *)p, pObj->Id, Abc_ObjFaninId0(pObj), Abc_ObjFaninId1(pObj),  
-        Abc_ObjFaninC0(pObj), Abc_ObjFaninC1(pObj), fTriv, TreeCode, pSim );  
-}
-
-void * nodeGetCutsRecursive( void * p, Abc_Obj_t * pObj, int fDag, int fTree, Fra_Sml_t * pSim )
-{
-    void * pList;
-    if ( (pList = Abc_NodeReadCuts( p, pObj )) )
-        return pList;
-    nodeGetCutsRecursive( p, Abc_ObjFanin0(pObj), fDag, fTree, pSim );
-    nodeGetCutsRecursive( p, Abc_ObjFanin1(pObj), fDag, fTree, pSim );
-    return nodeGetCuts( p, pObj, fDag, fTree, pSim );
+    return uCare;
 }
 
 void enumUTruth(unsigned uLocal, unsigned uCare, Vec_Int_t * pTruth)
 {
-    Vec_Int_t * pRes;
-    int bit, s, e = 0, i;
-
-    pRes = Vec_IntStart(0);
-    Vec_IntPush(pRes, uLocal);
+    if(uCare == 0xFFFF)
+    {
+        Vec_IntClear(pTruth);
+        Vec_IntPush(pTruth, uLocal);
+        return;
+    }
     
+    Vec_Int_t * pRes = Vec_IntAlloc(0);
+    int bit, s, e, i;
+
+    Vec_IntPush(pRes, uLocal);
     for(bit=0; bit<16; bit++)
     {
         if( (uCare >> bit)%2 == 0)
         {
             s = Vec_IntSize(pRes);
             Vec_IntForEachEntryStop(pRes, e, i, s)
-            {
-                Vec_IntPush(pRes, (unsigned)e);
                 Vec_IntPush(pRes, (unsigned)e ^ (1<<bit));
-            }
         }
     }
     Vec_IntClear(pTruth);
@@ -964,7 +799,10 @@ Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, V
 
 int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim )
 {
-printf("Start rewriting node %i\n", Abc_ObjId(pNode));
+    // icompactGencareset.cpp
+    extern void simFlipOneNode( unsigned int * uAlter, Fra_Sml_t * p, Aig_Obj_t * pObj);
+
+// printf("Start rewriting node %i\n", Abc_ObjId(pNode));
     
     int fVeryVerbose = 0;
     Dec_Graph_t * pGraph;
@@ -973,6 +811,8 @@ printf("Start rewriting node %i\n", Abc_ObjId(pNode));
     unsigned uPhase;
     unsigned uTruthBest = 0; // Suppress "might be used uninitialized"
     unsigned uLocal, uCare, uTruth;
+    bool fuAlterComputed = false;
+    unsigned int * uAlter = new unsigned int[pSim->nWordsTotal]();
     Vec_Int_t * pTruth = Vec_IntStart(0), * pClass = Vec_IntStart(0);
     char * pPerm;
     int Required, nNodesSaved;
@@ -986,7 +826,7 @@ printf("Start rewriting node %i\n", Abc_ObjId(pNode));
 
     // get the node's cuts
 clk = Abc_Clock();
-    pCut = (Cut_Cut_t *)nodeGetCutsRecursive( pManCut, pNode, 0, 0, pSim );
+    pCut = (Cut_Cut_t *)Abc_NodeGetCutsRecursive( pManCut, pNode, 0, 0);
     assert( pCut != NULL );
 p->timeCut += Abc_Clock() - clk;
 
@@ -1004,11 +844,18 @@ clk = Abc_Clock();
         // consider only 4-input cuts
         if ( pCut->nLeaves < 4 )
             continue;
-//            Cut_CutPrint( pCut, 0 ), printf( "\n" );
 
         // get the fanin permutation, modified to support external care set enum
         uLocal = 0xFFFF & *Cut_CutReadTruth(pCut);
-        uCare = pCut->uCare;
+
+        if (!fuAlterComputed)
+        {
+            simFlipOneNode(uAlter, pSim, (Aig_Obj_t *)pNode->pCopy); // compute uAlter once for the same root
+            fuAlterComputed = true;
+        } 
+        uCare = cutComputeCareset(pNode, pCut, pSim, uAlter);
+// printf("    uLocal : "); printBits(sizeof(uLocal), &uLocal);
+// printf("     uCare : "); printBits(sizeof(uCare), &uCare);
         enumUTruth(uLocal, uCare, pTruth);
         Vec_IntForEachEntry(pTruth, uTruth, i)
         {
@@ -1072,6 +919,7 @@ p->timeEval += Abc_Clock() - clk2;
                 p->pGraph  = pGraph;
                 p->fCompl = ((uPhase & (1<<4)) > 0);
                 uTruthBest = uTruth;
+// printf("    uTruth : "); printBits(sizeof(uTruth), &uTruth);
                 // collect fanins in the
                 Vec_PtrClear( p->vFanins );
                 Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
@@ -1150,6 +998,7 @@ p->timeRes += Abc_Clock() - clk;
     }
     Vec_IntFree(pTruth);
     Vec_IntFree(pClass);
+    delete [] uAlter;
     return GainBest;
 }
 
@@ -1222,9 +1071,6 @@ clk = Abc_Clock();
 Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
     pNtk->pManCut = pManCut;
 
-    // start the simulation mgr for careset computation
-    pSim = smlSimulateStart(pNtk, simFileName); 
-
     if ( fVeryVerbose )
         Rwr_ScoresClean( pManRwr );
 
@@ -1232,6 +1078,8 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
     pManRwr->nNodesBeg = Abc_NtkNodeNum(pNtk);
     nNodes = Abc_NtkObjNumMax(pNtk);
     pProgress = Extra_ProgressBarStart( stdout, nNodes );
+    // start the simulation mgr for careset computation
+    pSim = smlSimulateStart(pNtk, simFileName); 
     Abc_NtkForEachNode( pNtk, pNode, i )
     {
         Extra_ProgressBarUpdate( pProgress, i, NULL );
@@ -1247,6 +1095,7 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
 
         // for each cut, try to resynthesize it
         nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim );
+
         if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
             continue;
         // if we end up here, a rewriting step is accepted
@@ -1270,8 +1119,15 @@ Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
 //        if ( fPlaceEnable )
 //            Abc_PlaceUpdate( vAddedCells, vUpdatedNets );
 
+        // sanity check
+//         if(!ntkVerifySamples(pNtk, simFileName, 0))
+//         {
+//             printf("Verifying has failed.\n");
+//             return 0;
+//         }  
         // update simulation mgr
-        smlSimulateIncremental( pSim, pManRwr->vFanins);// vFanins carries Abc_Obj_t* instead of Aig_Node_t*
+        smlSimulateStop(pSim);
+        pSim = smlSimulateStart(pNtk, simFileName);
     }
     Extra_ProgressBarStop( pProgress );
 Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );

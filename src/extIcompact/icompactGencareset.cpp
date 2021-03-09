@@ -43,7 +43,7 @@ int smlWriteGolden( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, char* pfilen
     return 0;
 }
 
-int smlCompareGolden_all( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
+int smlCompareGolden_all( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, vector<int> &pWrong)
 {
     int k, i;
     char goldenBit;
@@ -65,13 +65,16 @@ int smlCompareGolden_all( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart)
                 break;
             } 
         }
-        if(fCorrect) { correctCount++; }
+        if(fCorrect) 
+            correctCount++;
+        else
+            pWrong.push_back(k);
     }
 
     return correctCount;
 }
 
-int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int * pCount)
+int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int * pCount, vector<int> &pWrong)
 {
     int k, i;
     char goldenBit;
@@ -92,7 +95,10 @@ int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int *
             else
                 pCount[i] = pCount[i] + 1;   
         }
-        if(fCorrect) { correctCount++; }
+        if(fCorrect) 
+            correctCount++;
+        else
+            pWrong.push_back(k);
     }
 
     return correctCount;
@@ -208,10 +214,17 @@ clk = Abc_Clock();
     Aig_ManForEachCo( pAig, pObj, i )
         Aig_ObjSetTravIdCurrent( pAig, pObj );
     Vec_PtrForEachEntry( Aig_Obj_t *, pList, pObj, i )
-        Aig_ManDfsReverse_rec( pAig, Aig_Regular(pObj), vNodes );
+        Aig_ManDfsReverse_rec( pAig, Aig_Regular(pObj), vNodes ); // collects TFO cone in post order
+/*    
+    printf("== sml incremental ==\n  Ids:");
+    Vec_PtrForEachEntry(Aig_Obj_t*, pList, pObj, i)
+        printf(" %i", Aig_ObjId(pObj));
+    printf("\n  Size: %i\n", Vec_PtrSize(vNodes));
+*/
     // simulate the nodes
-    Vec_PtrForEachEntry(Aig_Obj_t *, vNodes, pObj, i)
+    Vec_PtrForEachEntryReverse(Aig_Obj_t *, vNodes, pObj, i) // simulate in pre order
         Fra_SmlNodeSimulate( p, pObj, 0 );
+        
     // copy simulation info into outputs
     Aig_ManForEachPoSeq( p->pAig, pObj, i )
         Fra_SmlNodeCopyFanin( p, pObj, 0 );
@@ -220,51 +233,48 @@ p->nSimRounds++;
     Vec_PtrFree(vNodes);
 }
 
-void aigFlipNode( Aig_Man_t * pAig, int Node)
-{
-    Aig_Obj_t * pFanout, * pObj = Aig_ManObj(pAig, Node);
-    int iFanout = -1, k;
-    assert(pAig->pFanData);
-    Aig_ObjForEachFanout(pAig, pObj, pFanout, iFanout, k)
-    {     
-        if(Aig_ObjFanin0(pFanout) == Aig_Regular(pObj))
-            Aig_ObjChild0Flip(Aig_Regular(pFanout));
-        else if (Aig_ObjFanin1(pFanout) == Aig_Regular(pObj))
-            Aig_ObjChild1Flip(Aig_Regular(pFanout));
-        else // wrong fanout, collision maybe
-            continue;
-    }
-}
-
-unsigned int* simFlipOneNode( Fra_Sml_t * p, int Node)
+void simFlipOneNode( unsigned int * uAlter, Fra_Sml_t * p, Aig_Obj_t * pObj)
 {
     Aig_Man_t * pAig = p->pAig;
+    Aig_Obj_t * pFanout;
+    int iFanout = -1, k, w;
+    unsigned int * pBuffer[Aig_ManCoNum(pAig)], * pBits = Fra_ObjSim(p, Aig_ObjId(pObj));
     Vec_Ptr_t * vList = Vec_PtrAlloc(0);
-    unsigned int * pAlter, * pBuffer[Aig_ManCoNum(pAig)];
+    Aig_ObjForEachFanout(pAig, pObj, pFanout, iFanout, k)
+        Vec_PtrPush(vList, Aig_Regular(pFanout));
+    for(int w=0; w<p->nWordsTotal; w++)
+        uAlter[w] = 0;
 
-    pAlter = new unsigned int[p->nWordsTotal]();
-    for(int k=0; k<Aig_ManCoNum(pAig); k++)
+    for(k=0; k<Aig_ManCoNum(pAig); k++)
     {
-        pBuffer[k] = new unsigned int[p->nWordsTotal]();
-        pBuffer[k] = Fra_ObjSim( p, Aig_ObjId(Aig_ManCo(pAig, k)) );
+        pBuffer[k] = new unsigned int[p->nWordsTotal];
+        for(w=0; w<p->nWordsTotal; w++)
+            pBuffer[k][w] = Fra_ObjSim( p, Aig_ObjId(Aig_ManCo(pAig, k)) )[w];
     }
     
-    aigFlipNode(pAig, Node);
-    Vec_PtrPush(vList, Aig_Regular(Aig_ManObj(pAig, Node)));
+    // flip the bits
+    for(int w=0; w<p->nWordsTotal; w++)
+        pBits[w] = ~pBits[w];
     smlSimulateIncremental(p, vList);
 
-    for(int k=0; k<Aig_ManCoNum(pAig); k++)
+    for(k=0; k<Aig_ManCoNum(pAig); k++)
     {
-        for(int w=0; w<p->nWordsTotal; w++)
+        for(w=0; w<p->nWordsTotal; w++)
+        {
             pBuffer[k][w] ^= Fra_ObjSim( p, Aig_ObjId(Aig_ManCo(pAig, k)) )[w];
+            uAlter[w] |= pBuffer[k][w];
+        }      
     }
-    for(int k=0; k<Aig_ManCoNum(pAig); k++)
-    {
-        for(int w=0; w<p->nWordsTotal; w++)
-            pAlter[w] &= pBuffer[k][w];
-    }
+
+    // flip the bits back
+    for(int w=0; w<p->nWordsTotal; w++)
+        pBits[w] = ~pBits[w];
+    smlSimulateIncremental(p, vList);
+
+    // clean up
     Vec_PtrFree(vList);
-    return pAlter;
+    for(k=0; k<Aig_ManCoNum(pAig); k++)
+        delete [] pBuffer[k];
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
@@ -345,6 +355,7 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
     int nPatterns, nPart, nPatPerSim;
     int patLen;
     int correctCount, totalCount = 0;
+    vector<int> pWrong, pWrongTemp;
 
     // read comb patterns from file
     vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
@@ -365,7 +376,7 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
     nPatterns = Vec_StrSize(vSimInfo) / patLen;
 
     for (int n=0; n<=(nPatterns/nPatPerSim); n++)
-    {
+    {        
         nPart = (n==(nPatterns/nPatPerSim))? (nPatterns%nPatPerSim): nPatPerSim;
         if (nPart == 0) { break; }
         p = Fra_SmlStart( pAig, 0, 1, Abc_BitWordNum(nPart) );
@@ -377,15 +388,29 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
         // start simulation
         smlInitializeGiven( p, vSimPart );
         Fra_SmlSimulateOne( p );
-        correctCount = (pCount == NULL)? smlCompareGolden_all(p, vSimPart, nPart):
-                                         smlCompareGolden_each(p, vSimPart, nPart, pCount);
+        correctCount = (pCount == NULL)? smlCompareGolden_all(p, vSimPart, nPart, pWrongTemp):
+                                         smlCompareGolden_each(p, vSimPart, nPart, pCount, pWrongTemp);
         totalCount += correctCount;
+
+        if(fVerbose)
+        {
+            for(int i=0; i<pWrongTemp.size(); i++)
+                pWrong.push_back(pWrongTemp[i] + n*nPatPerSim);
+            pWrongTemp.clear();
+        }
 
         Vec_StrFree( vSimPart );
         Fra_SmlStop( p );
     }
     if(fVerbose)
+    {
         printf("Verifying circuit: %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
+        assert(pWrong.size() == (nPatterns-totalCount));
+        printf("Wrong patterns:");
+        for(int i=0; i<pWrong.size(); i++)
+            printf(" %i", pWrong[i]);
+        printf("\n");
+    }  
     Vec_StrFree( vSimInfo );
     return (totalCount == nPatterns)? 1: 0;
 }
