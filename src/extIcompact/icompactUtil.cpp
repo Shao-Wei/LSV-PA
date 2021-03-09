@@ -711,7 +711,7 @@ void enumUTruth(unsigned uLocal, unsigned uCare, Vec_Int_t * pTruth)
     Vec_IntFree(pRes);
 }
 
-Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, Vec_Ptr_t * vFaninsCur, int nNodesSaved, int LevelMax, int * pGainBest, int fPlaceEnable, unsigned uTruth )
+Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, Vec_Ptr_t * vFaninsCur, int nNodesSaved, int LevelMax, int * pGainBest, int fPlaceEnable, unsigned uTruth, int &nSubgraphsDC )
 {
     Vec_Ptr_t * vSubgraphs;
     Dec_Graph_t * pGraphBest = NULL; // Suppress "might be used uninitialized"
@@ -722,6 +722,7 @@ Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, V
     // find the matching class of subgraphs
     vSubgraphs = Vec_VecEntry( p->vClasses, p->pMap[uTruth] );
     p->nSubgraphs += vSubgraphs->nSize;
+    nSubgraphsDC += vSubgraphs->nSize; // extra stats
     // determine the best subgraph
     GainBest = -1;
     CostBest = ABC_INFINITY;
@@ -797,7 +798,7 @@ Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, V
     return pGraphBest;
 }
 
-int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim )
+int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim, abctime &timeDC, int &nSubgraphsDC )
 {
     // icompactGencareset.cpp
     extern void simFlipOneNode( unsigned int * uAlter, Fra_Sml_t * p, Aig_Obj_t * pObj);
@@ -817,8 +818,9 @@ int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int f
     char * pPerm;
     int Required, nNodesSaved;
     int nNodesSaveCur = -1; // Suppress "might be used uninitialized"
-    int i, GainCur = -1, GainBest = -1;
-    abctime clk, clk2;//, Counter;
+    int i, GainCur = -1, GainBest = -1, dummy = -1;
+    abctime clk, clk2, clk3;//, Counter;
+    bool fCutEval; // for stats recording
 
     p->nNodesConsidered++;
     // get the required times
@@ -845,15 +847,17 @@ clk = Abc_Clock();
         if ( pCut->nLeaves < 4 )
             continue;
 
+        fCutEval = false;
         // get the fanin permutation, modified to support external care set enum
         uLocal = 0xFFFF & *Cut_CutReadTruth(pCut);
-
+clk3 = Abc_Clock();
         if (!fuAlterComputed)
         {
             simFlipOneNode(uAlter, pSim, (Aig_Obj_t *)pNode->pCopy); // compute uAlter once for the same root
             fuAlterComputed = true;
         } 
         uCare = cutComputeCareset(pNode, pCut, pSim, uAlter);
+timeDC += Abc_Clock() - clk3;
 // printf("    uLocal : "); printBits(sizeof(uLocal), &uLocal);
 // printf("     uCare : "); printBits(sizeof(uCare), &uCare);
         enumUTruth(uLocal, uCare, pTruth);
@@ -881,7 +885,11 @@ clk = Abc_Clock();
                 p->nCutsBad++;
                 continue;
             }
-            p->nCutsGood++;
+            if(!fCutEval)
+            {
+                p->nCutsGood++;
+                fCutEval = true;
+            }    
 
             {
                 int Counter = 0;
@@ -907,7 +915,8 @@ p->timeMffc += Abc_Clock() - clk2;
 
             // evaluate the cut
 clk2 = Abc_Clock();
-            pGraph = cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth );
+            pGraph = (uTruth == uLocal)? cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth, dummy ):
+                                         cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth, nSubgraphsDC );
 p->timeEval += Abc_Clock() - clk2;
 
             // check if the cut is better than the current best one
@@ -1039,6 +1048,8 @@ int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose,
     int i, nNodes, nGain, fCompl;
     abctime clk, clkStart = Abc_Clock();
     Fra_Sml_t * pSim; // sim mgr for careset computation
+    abctime timeDC = 0; // extra stats
+    int nSubgraphsDC; // extra stats
 
     assert( Abc_NtkIsStrash(pNtk) );
     // cleanup the AIG
@@ -1094,7 +1105,7 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
             continue;
 
         // for each cut, try to resynthesize it
-        nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim );
+        nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim, timeDC, nSubgraphsDC );
 
         if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
             continue;
@@ -1126,15 +1137,23 @@ Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
 //             return 0;
 //         }  
         // update simulation mgr
+clk = Abc_Clock();
         smlSimulateStop(pSim);
         pSim = smlSimulateStart(pNtk, simFileName);
+timeDC += Abc_Clock() - clk;
     }
     Extra_ProgressBarStop( pProgress );
 Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
     // print stats
     pManRwr->nNodesEnd = Abc_NtkNodeNum(pNtk);
     if ( fVerbose )
+    {
         Rwr_ManPrintStats( pManRwr );
+        printf("DC Related Statistics:\n");
+        printf( "Extra subgraphs   = %8d. (%6.2f %%).\n", nSubgraphsDC, 100.0*(nSubgraphsDC) / pManRwr->nSubgraphs );
+        ABC_PRT( "    DC      ", timeDC ); // report stats, ~1/2 of total, over half spent on updating pSim
+    }
+        
 //        Rwr_ManPrintStatsFile( pManRwr );
     if ( fVeryVerbose )
         Rwr_ScoresReport( pManRwr );
