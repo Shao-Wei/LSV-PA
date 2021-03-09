@@ -384,14 +384,17 @@ void insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
     }
 }
 
-Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
+Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
 {
     extern int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj;
+    int sizeOld = Abc_NtkNodeNum(pNtk), sizeNew;
+    abctime clk, clkStart, timeCand = 0, timeVerify = 0, timeTotal = 0;
     assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
-    
+
+clkStart = Abc_Clock();
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
@@ -402,7 +405,7 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         Aig_ManStop(pAig);
         return pNtk;
     }
-
+clk = Abc_Clock();
     // find candidate STF
     vector< pair<int, int> > vCandidate;
     smlSTFaultCandidate(pAig, simFileName, vCandidate); // candidate in reverse topological order
@@ -412,6 +415,7 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         Aig_ManStop(pAig);
         return pNtk;
     }
+timeCand += Abc_Clock() - clk;
     for(int i=0, n=vCandidate.size(); i<n; i++)
     {
         pObj = Aig_ManObj(pAig, vCandidate[i].first);
@@ -420,9 +424,10 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
             nSkipped++;
             continue;
         }
-        // printf("pObj id: %i\n", pObj->Id);
+
         vector< pair<Aig_Obj_t*, int> > vFanout;
         insertSTFault(pAig, pObj, vFanout, vCandidate[i].second);
+clk = Abc_Clock();
         if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
         {
 //             printf("STF inserted at node %i\n", Aig_Regular(pObj)->Id);
@@ -433,19 +438,19 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         {
             removeSTFault(pAig, pObj, vFanout, vCandidate[i].second);
         }
+timeVerify += Abc_Clock() - clk;
     }
-    printf("Success in inserting ST0/1 at candidates: %i (skipped %i) / %lu\n", nSuccess, nSkipped, vCandidate.size());
     Aig_ManCleanup(pAig);
     pNtkNew = Abc_NtkFromDar(pNtk, pAig);
     pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
-    // printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
+    sizeNew = Abc_NtkNodeNum(pNtkNew);
 
     // make sure everything is okay
-    if(!ntkVerifySamples(pNtkNew, simFileName, 0))
-    {
-        printf("The simulation check has failed.\n");
-        return NULL;
-    }
+//     if(!ntkVerifySamples(pNtkNew, simFileName, 0))
+//     {
+//         printf("The simulation check has failed.\n");
+//         return NULL;
+//     }
     if ( !Abc_NtkCheck( pNtkNew ) )
     {
         printf( "The network check has failed.\n" );
@@ -453,6 +458,17 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         return NULL;
     }
 
+timeTotal += Abc_Clock() - clkStart;
+    // report stats
+    if(fVerbose)
+    {
+        printf( "STFault Insertion Statistics\n");
+        printf( "  Total Insertions  = %i (%i skipped) / %lu.\n", nSuccess, nSkipped, vCandidate.size());
+        printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
+        ABC_PRT( "  Candidate   ", timeCand );
+        ABC_PRT( "  Verify      ", timeVerify );
+        ABC_PRT( "  Total       ", timeTotal );
+    }
     // clean up
     Aig_ManFanoutStop(pAig);
     Aig_ManStop(pAig);
@@ -570,14 +586,17 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
     }
 }
 
-Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
 {
     extern int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj1, * pObj2;
+    int sizeOld = Abc_NtkNodeNum(pNtk), sizeNew;
+    abctime clk, clkStart, timeCand = 0, timeVerify = 0, timeTotal = 0;
     assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
-    
+
+clkStart = Abc_Clock();    
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
@@ -589,6 +608,7 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         return pNtk;
     }
 
+clk = Abc_Clock();
     // find candidate merge signals
     vector< pair<int, int> > vCandidate;
     smlSignalMergeCandidate(pAig, simFileName, vCandidate); // candidate in topological order
@@ -598,7 +618,7 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         Aig_ManStop(pAig);
         return pNtk;
     }
-
+timeCand += Abc_Clock() - clk;
     for(int i=vCandidate.size()-1; i>=0; i--)
     {
         pObj1 = Aig_ManObj(pAig, vCandidate[i].first);
@@ -612,6 +632,7 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         // try pObj2 merged to pObj1
         vector< pair<Aig_Obj_t*, int> > vFanout2;
         signalMerge(pAig, pObj1, pObj2, vFanout2);
+clk = Abc_Clock();
         if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
         {
 //             printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
@@ -623,20 +644,20 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         {
             signalUnMerge(pAig, pObj1, pObj2, vFanout2);
         }
+timeVerify += Abc_Clock() - clk;
     }
-    
-    printf("Success signal merging at candidates: %i (skipped %i) / %lu\n", nSuccess, nSkipped, vCandidate.size());
     Aig_ManCleanup(pAig);
     pNtkNew = Abc_NtkFromDar(pNtk, pAig);
     pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
+    sizeNew = Abc_NtkNodeNum(pNtkNew);
     // printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
 
     // make sure everything is okay
-    if(!ntkVerifySamples(pNtkNew, simFileName, 0))
-    {
-        printf("The simulation check has failed.\n");
-        return NULL;
-    }
+//     if(!ntkVerifySamples(pNtkNew, simFileName, 0))
+//     {
+//         printf("The simulation check has failed.\n");
+//         return NULL;
+//     }
     if ( !Abc_NtkCheck( pNtkNew ) )
     {
         printf( "The network check has failed.\n" );
@@ -644,6 +665,17 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         return NULL;
     }
 
+timeTotal += Abc_Clock() - clkStart;
+    // report stats
+    if(fVerbose)
+    {
+        printf( "Signal Merging Statistics\n");
+        printf( "  Total Mergings    = %i (%i skipped) / %lu.\n", nSuccess, nSkipped, vCandidate.size());
+        printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
+        ABC_PRT( "  Candidate   ", timeCand );
+        ABC_PRT( "  Verify      ", timeVerify );
+        ABC_PRT( "  Total       ", timeTotal );
+    }
     // clean up
     Aig_ManFanoutStop(pAig);
     Aig_ManStop(pAig);
@@ -1064,6 +1096,7 @@ int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose,
     int i, nNodes, nGain, fCompl;
     abctime clk, clkStart = Abc_Clock();
     Fra_Sml_t * pSim; // sim mgr for careset computation
+    Aig_Man_t * pAig;
     abctime timeDC = 0; // extra stats
     int nSubgraphsDC; // extra stats
 
@@ -1106,7 +1139,8 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
     nNodes = Abc_NtkObjNumMax(pNtk);
     pProgress = Extra_ProgressBarStart( stdout, nNodes );
     // start the simulation mgr for careset computation
-    pSim = smlSimulateStart(pNtk, simFileName); 
+    pAig = Abc_NtkToDar(pNtk, 0, 0);
+    pSim = smlSimulateStart(pAig, simFileName); 
     Abc_NtkForEachNode( pNtk, pNode, i )
     {
         Extra_ProgressBarUpdate( pProgress, i, NULL );
@@ -1155,7 +1189,8 @@ Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
         // update simulation mgr
 clk = Abc_Clock();
         smlSimulateStop(pSim);
-        pSim = smlSimulateStart(pNtk, simFileName);
+        pAig = Abc_NtkToDar(pNtk, 0, 0);
+        pSim = smlSimulateStart(pAig, simFileName);
 timeDC += Abc_Clock() - clk;
     }
     Extra_ProgressBarStop( pProgress );

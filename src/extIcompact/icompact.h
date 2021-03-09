@@ -42,8 +42,8 @@ ABC_NAMESPACE_HEADER_START
 // base/abci/abcStrash.c
 extern "C" { Abc_Ntk_t * Abc_NtkPutOnTop( Abc_Ntk_t * pNtk, Abc_Ntk_t * pNtk2 ); }
 /*== base/abci/abcDar.c ==*/
-extern Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters);
-extern Abc_Ntk_t *Abc_NtkFromDar( Abc_Ntk_t * pNtkOld, Aig_Man_t * pMan );
+extern "C" { Aig_Man_t *Abc_NtkToDar(Abc_Ntk_t *pNtk, int fExors, int fRegisters); }
+extern "C" { Abc_Ntk_t *Abc_NtkFromDar( Abc_Ntk_t * pNtkOld, Aig_Man_t * pMan ); }
 /*== opt/rwr/rwrMan.c ==*/
 extern "C" { void Rwr_Precompute(); }
 
@@ -204,7 +204,7 @@ private:
 extern int sat_solver_get_minimized_assumptions(sat_solver* s, int * pLits, int nLits, int nConfLimit);
 
 // icompactGencareset.cpp
-Fra_Sml_t * smlSimulateStart( Abc_Ntk_t* pNtk, char * pFileName); // out of capsule for careset computation in ntkRewrite
+Fra_Sml_t * smlSimulateStart( Aig_Man_t * pAig, char * pFileName); // out of capsule for careset computation in ntkRewrite
 void smlSimulateStop( Fra_Sml_t * p); // out of capsule for careset computation in ntkRewrite
 void smlSimulateIncremental( Fra_Sml_t * p, Vec_Ptr_t * pList);
 
@@ -221,8 +221,8 @@ char ** setDummyNames(int len, char * baseStr);
 
 int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
 int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
-Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName); // modifies src/aig/aig/aigTable.c Aig_TableLookUp() to avoid assertion fail
-Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName);
+Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose); // modifies src/aig/aig/aigTable.c Aig_TableLookUp() to avoid assertion fail
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose);
 int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName );
 
 ABC_NAMESPACE_HEADER_END

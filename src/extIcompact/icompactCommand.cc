@@ -364,7 +364,7 @@ static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtkNew = ntkSTFault(pNtk, verifyFileName);
+    pNtkNew = ntkSTFault(pNtk, verifyFileName, 1);
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
   
     return result;
@@ -423,7 +423,7 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtkNew = ntkSignalMerge(pNtk, verifyFileName);
+    pNtkNew = ntkSignalMerge(pNtk, verifyFileName, 1);
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
   
     return result;

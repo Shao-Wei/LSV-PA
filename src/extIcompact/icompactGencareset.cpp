@@ -165,13 +165,12 @@ void smlInitializeGiven( Fra_Sml_t * p, Vec_Str_t * vSimInfo )
 }
 
 // for external use
-Fra_Sml_t * smlSimulateStart( Abc_Ntk_t* pNtk, char * pFileName)
+Fra_Sml_t * smlSimulateStart( Aig_Man_t * pAig, char * pFileName)
 {
     Vec_Str_t * vSimInfo;
     Fra_Sml_t * p = NULL;
     int nPatterns;
     int patLen;
-    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
 
     vSimInfo = smlSimulateReadFile( pFileName, 5 );
     if ( vSimInfo == NULL )

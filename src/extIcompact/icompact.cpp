@@ -908,12 +908,12 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
     }
     if(fSTF)
     {
-        pNtk = ntkSTFault(pNtk, _workingFileName);
+        pNtk = ntkSTFault(pNtk, _workingFileName, 1);
         pNtk = ntkMinimize(pNtk, 1, 0);
     }
     if(fMerge)
     {
-        pNtk = ntkSignalMerge(pNtk, _workingFileName);
+        pNtk = ntkSignalMerge(pNtk, _workingFileName, 1);
         pNtk = ntkMinimize(pNtk, 1, 0);
     }
 
@@ -993,12 +993,12 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, 
     }
     if(fSTF)
     {
-        pNtk = ntkSTFault(pNtk, _workingFileName);
+        pNtk = ntkSTFault(pNtk, _workingFileName, 1);
         pNtk = ntkMinimize(pNtk, 1, 0);
     }
     if(fMerge)
     {
-        pNtk = ntkSignalMerge(pNtk, _workingFileName);
+        pNtk = ntkSignalMerge(pNtk, _workingFileName, 1);
         pNtk = ntkMinimize(pNtk, 1, 0);
     }
     
