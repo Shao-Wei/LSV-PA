@@ -104,8 +104,24 @@ char ** setDummyNames(int len, char * baseStr)
     return result;
 }
 
-// check if two bits are complement
-bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
+// check specific bit on first pattern
+bool firstPatternOneBit(char * pFileName, int idx)
+{
+    char bit;
+    char buff[102400];
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    FILE* fpattern = fopen(pFileName, "r");
+    for(int i=0; i<6; i++) // get first pattern
+        unused = fgets(buff, 102400, fpattern);
+    
+    bit = buff[idx];
+
+    fclose(fpattern);
+    return (bit == '1');
+}
+
+// check if two bits are complement on first pattern
+bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx)
 {
     char iBit, oBit;
     char buff[102400];
@@ -118,7 +134,7 @@ bool singleSupportComplement(char * pFileName, int piIdx, int poIdx)
     oBit = buff[poIdx];
 
     fclose(fpattern);
-    return (iBit != oBit);
+    return (iBit == oBit);
 }
 
 /////////////////////////////////////////////////////////
@@ -409,7 +425,7 @@ Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName)
         insertSTFault(pAig, pObj, vFanout, vCandidate[i].second);
         if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
         {
-            printf("STF inserted at node %i\n", Aig_Regular(pObj)->Id);
+//             printf("STF inserted at node %i\n", Aig_Regular(pObj)->Id);
             Aig_ManCleanup(pAig);
             nSuccess++;
         }       
@@ -598,7 +614,7 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName)
         signalMerge(pAig, pObj1, pObj2, vFanout2);
         if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
         {
-            printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
+//             printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
             Aig_ManCleanup(pAig);
             nSuccess++;
             continue;

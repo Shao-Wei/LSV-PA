@@ -160,7 +160,7 @@ int IcompactMgr::exp_support_icompact_heuristic_options()
     if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; return 0; }
     _end_time = Abc_Clock();
     time_h = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-
+/*
     _step_time = Abc_Clock();
     pNtk1 = constructNtkEach(minMaskList, 0, 0, 0, 0);
     if(pNtk1 == NULL) { return 0; }
@@ -172,7 +172,7 @@ int IcompactMgr::exp_support_icompact_heuristic_options()
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
-
+*/
     _step_time = Abc_Clock();
     pNtk3 = constructNtkEach(minMaskList, 0, 0, 1, 1);
     if(pNtk3 == NULL) { return 0; }
@@ -187,14 +187,14 @@ int IcompactMgr::exp_support_icompact_heuristic_options()
     fprintf(fLog, "%s, %i, %i, %f\n", _funcFileName, _oriPatCount, _uniquePatCount, 100*_uniquePatCount/pow(2, _nPi));
     
     fprintf(fLog, "Timing (s), icompact, construct ntk\n");
-    fprintf(fLog, "none, %f, %f\n", time_h, time_c1);
-    fprintf(fLog, "stfault, %f, %f\n", time_h, time_c2);
+//     fprintf(fLog, "none, %f, %f\n", time_h, time_c1);
+//     fprintf(fLog, "stfault, %f, %f\n", time_h, time_c2);
     fprintf(fLog, "stfault_signal merge, %f, %f\n", time_h, time_c3);
 
     fprintf(fLog, "Overall circuit size(aig gate count)\n");
     fprintf(fLog, "original, %i\n", Abc_NtkNodeNum(_pNtk_func));
-    fprintf(fLog, "none, %i\n", Abc_NtkNodeNum(pNtk1));
-    fprintf(fLog, "stfault, %i\n", Abc_NtkNodeNum(pNtk2));
+//     fprintf(fLog, "none, %i\n", Abc_NtkNodeNum(pNtk1));
+//     fprintf(fLog, "stfault, %i\n", Abc_NtkNodeNum(pNtk2));
     fprintf(fLog, "stfault_signal merge, %i\n", Abc_NtkNodeNum(pNtk3));
 
     /*
@@ -246,9 +246,9 @@ int IcompactMgr::exp_support_icompact_heuristic_options()
         
     // clean up
     fclose(fLog);
-    Abc_NtkDelete(pNtk1);
-    Abc_NtkDelete(pNtk2);
-
+//     Abc_NtkDelete(pNtk1);
+//     Abc_NtkDelete(pNtk2);
+    Abc_NtkDelete(pNtk3);
     return 0;
 }
 

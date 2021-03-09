@@ -827,7 +827,8 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
 Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge)
 {
     // icompactUtil.cpp
-    extern bool singleSupportComplement(char * pFileName, int piIdx, int poIdx);
+    extern bool firstPatternOneBit(char * pFileName, int idx);
+    extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
     
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
     Abc_Obj_t *pPi, *pPo;
@@ -855,13 +856,24 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
         fanInList.clear();
         for(int piIdx=0; piIdx<_workingPi; piIdx++)
             if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
-        
-        if(fanInList.size() == 1)
+        if(fanInList.size() == 0) // const
+        {
+            pNtkTmp = Abc_NtkAlloc(ABC_NTK_LOGIC, ABC_FUNC_AIG, 1);
+            pPo = Abc_NtkCreatePo(pNtkTmp);
+            Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
+            Abc_ObjAddFanin(pPo, Abc_NtkCreateNodeConst1(pNtkTmp));
+            if(!firstPatternOneBit(_workingFileName, _nPi + 1 + poIdx)) 
+                Abc_ObjSetFaninC(pPo, 0); // set complement
+            pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
+            if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
+            Abc_NtkDelete(pNtkTmp);
+        }
+        else if(fanInList.size() == 1)
         {
             pPo = Abc_NtkCreatePo(pNtk);
             Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
             Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, fanInList[0]));
-            if(singleSupportComplement(_workingFileName, fanInList[0], _nPi + 1 + poIdx)) 
+            if(!firstPatternTwoBits(_workingFileName, fanInList[0], _nPi + 1 + poIdx)) 
                 Abc_ObjSetFaninC(pPo, 0); // set complement
         }
         else
@@ -913,7 +925,7 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
 Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge)
 {
     // icompactUtil.cpp
-    extern bool singleSupportComplement(char * pFileName, int piIdx, int poIdx);
+    extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
 
     bool check;
     Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
@@ -947,7 +959,7 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, 
             pPo = Abc_NtkCreatePo(pNtk);
             Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
             Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, recordPo[poIdx]));
-            if(singleSupportComplement(_workingFileName, recordPo[poIdx], _nRPo + 1 + poIdx))
+            if(!firstPatternTwoBits(_workingFileName, recordPo[poIdx], _nRPo + 1 + poIdx))
                 Abc_ObjSetFaninC(pPo, 0); // set complement
         }
         else

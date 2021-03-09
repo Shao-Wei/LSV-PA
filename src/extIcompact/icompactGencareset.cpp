@@ -406,10 +406,13 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
     {
         printf("Verifying circuit: %i / %i (correct/total) (%f%%)\n", totalCount, nPatterns, 100*totalCount/(double)nPatterns);
         assert(pWrong.size() == (nPatterns-totalCount));
-        printf("Wrong patterns:");
-        for(int i=0; i<pWrong.size(); i++)
-            printf(" %i", pWrong[i]);
-        printf("\n");
+        if(totalCount != nPatterns)
+        {
+            printf("Wrong patterns:");
+            for(int i=0; i<pWrong.size(); i++)
+                printf(" %i", pWrong[i]);
+            printf("\n");
+        } 
     }  
     Vec_StrFree( vSimInfo );
     return (totalCount == nPatterns)? 1: 0;
