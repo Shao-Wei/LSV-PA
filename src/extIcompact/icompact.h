@@ -134,7 +134,7 @@ private:
     char *_caresetFileName;
     char *_baseFileName; // base file name for multiple intermediate files
     char *_resultlogFileName;
-    char* _tmpFileName = "tmp.pla";
+    char _tmpFileName[500];
 
     // intermediate files
     char _samplesplaFileName[500]; // samples of simulation
@@ -181,7 +181,7 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fVerbose);
     Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()
@@ -209,7 +209,7 @@ void smlSimulateStop( Fra_Sml_t * p); // out of capsule for careset computation 
 void smlSimulateIncremental( Fra_Sml_t * p, Vec_Ptr_t * pList);
 
 int smlSimulateCombGiven( Abc_Ntk_t *pNtk, char * pFileName);
-int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fVerbose);
+int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int fVerbose);
 void n_gen_AP(int nPat, int nPi, int nPo, char* filename);
 void n_gen_Random(int nPat, int nPi, int nPo, char* filename);
 void n_gen_Cube(int nPat, int nCube, int nPi, int nPo, char* filename);

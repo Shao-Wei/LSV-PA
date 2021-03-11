@@ -94,7 +94,6 @@ int ICompactHeuristicMgr::uniquePat(int fRemove)
 {
     if(!_fNotMasked) { reset(); }
     
-    int oriCount = _vecPat.size();
     int newCount = 1;
 
     sort(_vecPat.begin(), _vecPat.end(), PatternLessThan);
@@ -119,8 +118,6 @@ int ICompactHeuristicMgr::uniquePat(int fRemove)
             it++;
         }
     }
-    printf("Unique Pat: %i / %i (unique / total)\n", newCount, oriCount);
-    printf("Simulated portion: %f%% (%i inputs)\n", 100*newCount/pow(2, _nPi), _nPi);
     return newCount;
 }
 

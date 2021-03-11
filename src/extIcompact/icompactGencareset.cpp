@@ -74,7 +74,7 @@ int smlCompareGolden_all( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, vector
     return correctCount;
 }
 
-int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int * pCount, vector<int> &pWrong)
+int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, vector<int> &pCount, vector<int> &pWrong)
 {
     int k, i;
     char goldenBit;
@@ -83,6 +83,8 @@ int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int *
     Aig_Man_t * pAig = p->pAig;
     bool fCorrect;
     int correctCount = 0;
+    for(i=0; i<Aig_ManCoNum(pAig); i++)
+        pCount.push_back(0);
 
     for(k=0; k<nPart; k++)
     {
@@ -90,10 +92,11 @@ int smlCompareGolden_each( Fra_Sml_t * p, Vec_Str_t * vSimInfo, int nPart, int *
         Aig_ManForEachCo(pAig, pObj, i)
         {
             goldenBit = Vec_StrEntry(vSimInfo, (k+1)*Aig_ManCiNum(pAig)+ k*Aig_ManCoNum(pAig) + i);
-            if(Abc_InfoHasBit(Fra_ObjSim( p, pObj->Id ), k) != goldenBit) 
+            if(Abc_InfoHasBit(Fra_ObjSim( p, pObj->Id ), k) != goldenBit)
+            {
                 fCorrect = 0;
-            else
-                pCount[i] = pCount[i] + 1;   
+                pCount[i] += 1; 
+            }    
         }
         if(fCorrect) 
             correctCount++;
@@ -347,14 +350,14 @@ int smlSimulateCombGiven( Abc_Ntk_t* pNtk, char * pFileName)
 }
 
 // modified from src/proof/fra/fraSim.c Fra_SmlSimulateCombGiven()
-int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fVerbose)
+int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int fVerbose)
 {
     Vec_Str_t * vSimInfo, * vSimPart;
     Fra_Sml_t * p = NULL;
     int nPatterns, nPart, nPatPerSim;
     int patLen;
     int correctCount, totalCount = 0;
-    vector<int> pWrong, pWrongTemp;
+    vector<int> pWrong, pWrongTemp, pCount;
 
     // read comb patterns from file
     vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
@@ -387,8 +390,9 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
         // start simulation
         smlInitializeGiven( p, vSimPart );
         Fra_SmlSimulateOne( p );
-        correctCount = (pCount == NULL)? smlCompareGolden_all(p, vSimPart, nPart, pWrongTemp):
-                                         smlCompareGolden_each(p, vSimPart, nPart, pCount, pWrongTemp);
+        correctCount = (fVerbose)? smlCompareGolden_each(p, vSimPart, nPart, pCount, pWrongTemp):
+                                   smlCompareGolden_all(p, vSimPart, nPart, pWrongTemp);
+                                         
         totalCount += correctCount;
 
         if(fVerbose)
@@ -410,6 +414,10 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int * pCount, int fV
             printf("Wrong patterns:");
             for(int i=0; i<pWrong.size(); i++)
                 printf(" %i", pWrong[i]);
+            printf("\n");
+            printf("Wrong patterns for each Po:");
+            for(int i=0; i<pCount.size(); i++)
+                printf(" %i", pCount[i]);
             printf("\n");
         } 
     }  

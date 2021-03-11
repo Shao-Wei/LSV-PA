@@ -57,6 +57,7 @@ IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFi
     sprintf(_forqesFileName,          "%s.full.dimacs",   baseFileName);
     sprintf(_forqesCareFileName,      "%s.care.dimacs",   baseFileName);
     sprintf(_MUSFileName,             "%s.gcnf",          baseFileName);
+    sprintf(_tmpFileName,             "%s.tmp.pla",       baseFileName);
    
     ///////////////////////////////////////////////////
     // set basics
@@ -85,13 +86,13 @@ IcompactMgr::~IcompactMgr()
     
     if(_supportInfo_func != NULL)
     {
-        for(int i=0; i<_nPi; i++)
+        for(int i=0; i<_nPo; i++)
             delete [] _supportInfo_func[i];
         delete [] _supportInfo_func;
     }
     if(_supportInfo_patt != NULL)
     {
-        for(int i=0; i<_nPi; i++)
+        for(int i=0; i<_nPo; i++)
             delete [] _supportInfo_patt[i];
         delete [] _supportInfo_patt;
     }
@@ -210,7 +211,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtkEach(minMaskList, 0, 1, 1, 1);
+        _pNtk_core = constructNtkEach(minMaskList, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -824,17 +825,21 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFraig, int fSTF, int fMerge)
+Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
 {
     // icompactUtil.cpp
     extern bool firstPatternOneBit(char * pFileName, int idx);
     extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
     
-    Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
-    Abc_Obj_t *pPi, *pPo;
-    char * caresetFileName = "tmp.careset.pla";
+    printf("[Info] Start construct ntk\n");
+    Abc_Ntk_t * pNtk, * pNtkTmp;
+    Abc_Obj_t * pPi, * pPo;
+    abctime clk, clkStart = Abc_Clock(), timeMin = 0, timeTotal = 0;
+    int sizeEach, sizeSTF, sizeMerge, sizeRewrite;
+//     Abc_Ntk_t * pNtkCare;
+//     char * caresetFileName = "tmp.careset.pla";
 
-    // set conditions later. Support w/o ocompact for now.
+    // Support w/o ocompact for now.
     strncpy(_workingFileName, _samplesplaFileName, 500);
     _litWorkingPi = _litPi;
     _litWorkingPo = _litPo;
@@ -856,6 +861,7 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
         fanInList.clear();
         for(int piIdx=0; piIdx<_workingPi; piIdx++)
             if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
+
         if(fanInList.size() == 0) // const
         {
             pNtkTmp = Abc_NtkAlloc(ABC_NTK_LOGIC, ABC_FUNC_AIG, 1);
@@ -872,7 +878,8 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
         {
             pPo = Abc_NtkCreatePo(pNtk);
             Abc_ObjAssignName(pPo, _poNames[poIdx], NULL);
-            Abc_ObjAddFanin(pPo, Abc_NtkPi(pNtk, fanInList[0]));
+            pPi = Abc_NtkFindCi(pNtk, _piNames[fanInList[0]]);
+            Abc_ObjAddFanin(pPo, pPi);
             if(!firstPatternTwoBits(_workingFileName, fanInList[0], _nPi + 1 + poIdx)) 
                 Abc_ObjSetFaninC(pPo, 0); // set complement
         }
@@ -889,36 +896,68 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fMfs, int fFra
             // pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
             // if(fMfs)
             //     pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
-            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);   
+clk = Abc_Clock();
+            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);  
+timeMin += Abc_Clock() - clk; 
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
             // Abc_NtkDelete(pNtkCare); // error: internal flags used
         }
     }
+clk = Abc_Clock();
     pNtk = ntkMinimize(pNtk, 1, 0);
+timeMin += Abc_Clock() - clk;
     orderPiPo(pNtk);
-    if(fFraig)
+sizeEach = Abc_NtkNodeNum(pNtk);
+
+if(ntkVerifySamples(pNtk, _workingFileName, 1) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+
+//     if(fFraig)
+//     {
+//         for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
+//         writeCaresetpla(caresetFileName);
+//         pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
+//         pNtkCare = Abc_NtkStrash(pNtkCare, 0, 0, 0);
+//         Abc_ObjXorFaninC( Abc_NtkPo(pNtkCare, 0), 0 );
+//         pNtk = ntkFraig(pNtk, pNtkCare);
+//     }
+
+    // customized don't care minimization
+    pNtk = ntkSTFault(pNtk, _workingFileName, fVerbose);
+clk = Abc_Clock();
+    pNtk = ntkMinimize(pNtk, 1, 0);
+timeMin += Abc_Clock() - clk;
+sizeSTF = Abc_NtkNodeNum(pNtk);
+    
+    pNtk = ntkSignalMerge(pNtk, _workingFileName, fVerbose);
+clk = Abc_Clock();
+    pNtk = ntkMinimize(pNtk, 1, 0);
+timeMin += Abc_Clock() - clk;
+sizeMerge = Abc_NtkNodeNum(pNtk);
+    
+    for(int i=0; i<5; i++)
     {
-        for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
-        writeCaresetpla(caresetFileName);
-        pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
-        pNtkCare = Abc_NtkStrash(pNtkCare, 0, 0, 0);
-        Abc_ObjXorFaninC( Abc_NtkPo(pNtkCare, 0), 0 );
-        pNtk = ntkFraig(pNtk, pNtkCare);
-    }
-    if(fSTF)
-    {
-        pNtk = ntkSTFault(pNtk, _workingFileName, 1);
+        ntkRewrite(pNtk, 0, 0, ((i==0)&fVerbose), 0, 0, _workingFileName);
+clk = Abc_Clock();
         pNtk = ntkMinimize(pNtk, 1, 0);
+timeMin += Abc_Clock() - clk;
     }
-    if(fMerge)
-    {
-        pNtk = ntkSignalMerge(pNtk, _workingFileName, 1);
-        pNtk = ntkMinimize(pNtk, 1, 0);
-    }
+sizeRewrite = Abc_NtkNodeNum(pNtk);
 
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
-    if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+    if(ntkVerifySamples(pNtk, _workingFileName, 0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+timeTotal = Abc_Clock() - clkStart;
+    if(fVerbose)
+    {
+        printf("> Construct Ntk Statistics:\n");
+        printf("  size Each    = %i\n", sizeEach);
+        printf("  size STF     = %i\n", sizeSTF);
+        printf("  size Merge   = %i\n", sizeMerge);
+        printf("  size Rewrite = %i\n", sizeRewrite);
+        ABC_PRT("  Standard Min   ", timeMin);
+        ABC_PRT("  Total          ", timeTotal);
+    }
+
     return pNtk;
 }
 
@@ -928,9 +967,10 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, 
     extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
 
     bool check;
-    Abc_Ntk_t *pNtk, *pNtkTmp, *pNtkCare;
+    Abc_Ntk_t *pNtk, *pNtkTmp;
     Abc_Obj_t *pPi, *pPo;
-    char * caresetFileName = "tmp.careset.pla";
+//     Abc_Ntk_t * pNtkCare;
+//     char * caresetFileName = "tmp.careset.pla";
 
     strncpy(_workingFileName, _outputmappingFileName, 500);
     _litWorkingPi = _litRPo;
@@ -982,25 +1022,6 @@ Abc_Ntk_t * IcompactMgr::constructNtkOmap(int * recordPo, int fMfs, int fFraig, 
     }
     pNtk = ntkMinimize(pNtk, 1, 0);
     orderPiPo(pNtk);
-    if(fFraig)
-    {
-        for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 1; }
-        writeCaresetpla(caresetFileName);
-        pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
-        pNtkCare = Abc_NtkStrash(pNtkCare, 0, 0, 0);
-        Abc_ObjXorFaninC( Abc_NtkPo(pNtkCare, 0), 0 );
-        pNtk = ntkFraig(pNtk, pNtkCare);
-    }
-    if(fSTF)
-    {
-        pNtk = ntkSTFault(pNtk, _workingFileName, 1);
-        pNtk = ntkMinimize(pNtk, 1, 0);
-    }
-    if(fMerge)
-    {
-        pNtk = ntkSignalMerge(pNtk, _workingFileName, 1);
-        pNtk = ntkMinimize(pNtk, 1, 0);
-    }
     
     if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
     // if(ntkVerifySamples(pNtk, _workingFileName,0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
@@ -1167,6 +1188,7 @@ int IcompactMgr::icompact_heuristic(int iterNum, double fRatio, int fSupport)
 
 bool ** IcompactMgr::icompact_heuristic_each(int iterNum, double fRatio, int fSupport)
 {
+    printf("[Info] Start %sicompact heuristic\n", (fSupport)? "support given ": "");
     bool ** minMaskList;
     if(fSupport)
     {

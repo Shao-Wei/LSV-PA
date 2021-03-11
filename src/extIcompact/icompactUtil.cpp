@@ -167,19 +167,7 @@ int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose)
 
     // verify
     pAig = Abc_NtkToDar(pNtk, 0, 0);
-    if(!fVerbose)
-        result = smlVerifyCombGiven(pAig, pFile, NULL, 1);
-    else
-    {
-        int * pCount = new int[nPo_file]();
-        result = smlVerifyCombGiven(pAig, pFile, pCount, 1);
-        printf("correct pat num for each po:\n  ");
-        for(int i=0; i<nPo_file; i++)
-            printf(" %i", pCount[i]);
-        printf("\n");
-
-        delete [] pCount;
-    }
+    result = smlVerifyCombGiven(pAig, pFile, fVerbose);
     
     return result;
 }
@@ -398,13 +386,14 @@ clkStart = Abc_Clock();
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
-
-    if(!smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+    if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
         printf("Bad pNtk / sim file pair\n");
+        Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
     }
+
 clk = Abc_Clock();
     // find candidate STF
     vector< pair<int, int> > vCandidate;
@@ -412,6 +401,7 @@ clk = Abc_Clock();
     if(vCandidate.size() == 0)
     {
         printf("No STF candidate\n");
+        Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
     }
@@ -428,7 +418,7 @@ timeCand += Abc_Clock() - clk;
         vector< pair<Aig_Obj_t*, int> > vFanout;
         insertSTFault(pAig, pObj, vFanout, vCandidate[i].second);
 clk = Abc_Clock();
-        if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+        if(smlVerifyCombGiven(pAig, simFileName, 0))
         {
 //             printf("STF inserted at node %i\n", Aig_Regular(pObj)->Id);
             Aig_ManCleanup(pAig);
@@ -446,23 +436,20 @@ timeVerify += Abc_Clock() - clk;
     sizeNew = Abc_NtkNodeNum(pNtkNew);
 
     // make sure everything is okay
-//     if(!ntkVerifySamples(pNtkNew, simFileName, 0))
-//     {
-//         printf("The simulation check has failed.\n");
-//         return NULL;
-//     }
     if ( !Abc_NtkCheck( pNtkNew ) )
     {
         printf( "The network check has failed.\n" );
         Abc_NtkDelete( pNtkNew );
-        return NULL;
+        Aig_ManFanoutStop(pAig);
+        Aig_ManStop(pAig);
+        return pNtk;
     }
 
 timeTotal += Abc_Clock() - clkStart;
     // report stats
     if(fVerbose)
     {
-        printf( "STFault Insertion Statistics\n");
+        printf( "> STFault Insertion Statistics:\n");
         printf( "  Total Insertions  = %i (%i skipped) / %lu.\n", nSuccess, nSkipped, vCandidate.size());
         printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
         ABC_PRT( "  Candidate   ", timeCand );
@@ -472,6 +459,7 @@ timeTotal += Abc_Clock() - clkStart;
     // clean up
     Aig_ManFanoutStop(pAig);
     Aig_ManStop(pAig);
+    Abc_NtkDelete(pNtk);
     return pNtkNew;
 }
 
@@ -600,10 +588,10 @@ clkStart = Abc_Clock();
     pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
-
-    if(!smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+    if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
         printf("Bad pNtk / sim file pair\n");
+        Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
     }
@@ -615,6 +603,7 @@ clk = Abc_Clock();
     if(vCandidate.size() == 0)
     {
         printf("No signal merge candidate\n");
+        Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
     }
@@ -633,7 +622,7 @@ timeCand += Abc_Clock() - clk;
         vector< pair<Aig_Obj_t*, int> > vFanout2;
         signalMerge(pAig, pObj1, pObj2, vFanout2);
 clk = Abc_Clock();
-        if(smlVerifyCombGiven(pAig, simFileName, NULL, 0))
+        if(smlVerifyCombGiven(pAig, simFileName, 0))
         {
 //             printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
             Aig_ManCleanup(pAig);
@@ -662,14 +651,16 @@ timeVerify += Abc_Clock() - clk;
     {
         printf( "The network check has failed.\n" );
         Abc_NtkDelete( pNtkNew );
-        return NULL;
+        Aig_ManFanoutStop(pAig);
+        Aig_ManStop(pAig);
+        return pNtk;
     }
 
 timeTotal += Abc_Clock() - clkStart;
     // report stats
     if(fVerbose)
     {
-        printf( "Signal Merging Statistics\n");
+        printf( "> Signal Merging Statistics:\n");
         printf( "  Total Mergings    = %i (%i skipped) / %lu.\n", nSuccess, nSkipped, vCandidate.size());
         printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
         ABC_PRT( "  Candidate   ", timeCand );
@@ -679,6 +670,7 @@ timeTotal += Abc_Clock() - clkStart;
     // clean up
     Aig_ManFanoutStop(pAig);
     Aig_ManStop(pAig);
+    Abc_NtkDelete(pNtk);
     return pNtkNew;
 }
 
@@ -759,7 +751,7 @@ void enumUTruth(unsigned uLocal, unsigned uCare, Vec_Int_t * pTruth)
     Vec_IntFree(pRes);
 }
 
-Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, Vec_Ptr_t * vFaninsCur, int nNodesSaved, int LevelMax, int * pGainBest, int fPlaceEnable, unsigned uTruth, int &nSubgraphsDC )
+Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, Vec_Ptr_t * vFaninsCur, int nNodesSaved, int LevelMax, int * pGainBest, int fPlaceEnable, unsigned uTruth )
 {
     Vec_Ptr_t * vSubgraphs;
     Dec_Graph_t * pGraphBest = NULL; // Suppress "might be used uninitialized"
@@ -770,7 +762,6 @@ Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, V
     // find the matching class of subgraphs
     vSubgraphs = Vec_VecEntry( p->vClasses, p->pMap[uTruth] );
     p->nSubgraphs += vSubgraphs->nSize;
-    nSubgraphsDC += vSubgraphs->nSize; // extra stats
     // determine the best subgraph
     GainBest = -1;
     CostBest = ABC_INFINITY;
@@ -846,7 +837,7 @@ Dec_Graph_t * cutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCut, V
     return pGraphBest;
 }
 
-int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim, abctime &timeDC, int &nSubgraphsDC )
+int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, Fra_Sml_t * pSim, abctime &timeDCSim )
 {
     // icompactGencareset.cpp
     extern void simFlipOneNode( unsigned int * uAlter, Fra_Sml_t * p, Aig_Obj_t * pObj);
@@ -866,8 +857,8 @@ int rwrNodeRewrite( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int f
     char * pPerm;
     int Required, nNodesSaved;
     int nNodesSaveCur = -1; // Suppress "might be used uninitialized"
-    int i, GainCur = -1, GainBest = -1, dummy = -1;
-    abctime clk, clk2, clk3;//, Counter;
+    int i, GainCur = -1, GainBest = -1;
+    abctime clk, clk2;//, Counter;
     bool fCutEval; // for stats recording
 
     p->nNodesConsidered++;
@@ -898,17 +889,15 @@ clk = Abc_Clock();
         fCutEval = false;
         // get the fanin permutation, modified to support external care set enum
         uLocal = 0xFFFF & *Cut_CutReadTruth(pCut);
-clk3 = Abc_Clock();
+clk2 = Abc_Clock();
         if (!fuAlterComputed)
         {
             simFlipOneNode(uAlter, pSim, (Aig_Obj_t *)pNode->pCopy); // compute uAlter once for the same root
             fuAlterComputed = true;
         } 
         uCare = cutComputeCareset(pNode, pCut, pSim, uAlter);
-timeDC += Abc_Clock() - clk3;
-// printf("    uLocal : "); printBits(sizeof(uLocal), &uLocal);
-// printf("     uCare : "); printBits(sizeof(uCare), &uCare);
         enumUTruth(uLocal, uCare, pTruth);
+timeDCSim += Abc_Clock() - clk2;
         Vec_IntForEachEntry(pTruth, uTruth, i)
         {
             if(Vec_IntFind(pClass, p->pMap[uTruth]) != -1)
@@ -963,8 +952,7 @@ p->timeMffc += Abc_Clock() - clk2;
 
             // evaluate the cut
 clk2 = Abc_Clock();
-            pGraph = (uTruth == uLocal)? cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth, dummy ):
-                                         cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth, nSubgraphsDC );
+            pGraph = cutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable, uTruth );                                       
 p->timeEval += Abc_Clock() - clk2;
 
             // check if the cut is better than the current best one
@@ -1094,22 +1082,22 @@ int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose,
 //    Vec_Ptr_t * vAddedCells = NULL, * vUpdatedNets = NULL;
     Dec_Graph_t * pGraph;
     int i, nNodes, nGain, fCompl;
-    abctime clk, clkStart = Abc_Clock();
+    abctime clk, clk2, clkStart = Abc_Clock();
     Fra_Sml_t * pSim; // sim mgr for careset computation
     Aig_Man_t * pAig;
-    abctime timeDC = 0; // extra stats
-    int nSubgraphsDC; // extra stats
+    abctime timeDCSim = 0, timeDCUpdate = 0; // extra stats
 
     assert( Abc_NtkIsStrash(pNtk) );
     // cleanup the AIG
     Abc_AigCleanup((Abc_Aig_t *)pNtk->pManFunc);
-/*
+
+    pAig = Abc_NtkToDar(pNtk, 0, 0);
+    if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
-        Vec_Vec_t * vParts;
-        vParts = Abc_NtkPartitionSmart( pNtk, 50, 1 );
-        Vec_VecFree( vParts );
+        printf("Bad pNtk / sim file pair\n");
+        Aig_ManStop(pAig);
+        return 0;
     }
-*/
 
     // start placement package
 //    if ( fPlaceEnable )
@@ -1139,7 +1127,6 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
     nNodes = Abc_NtkObjNumMax(pNtk);
     pProgress = Extra_ProgressBarStart( stdout, nNodes );
     // start the simulation mgr for careset computation
-    pAig = Abc_NtkToDar(pNtk, 0, 0);
     pSim = smlSimulateStart(pAig, simFileName); 
     Abc_NtkForEachNode( pNtk, pNode, i )
     {
@@ -1155,7 +1142,7 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
             continue;
 
         // for each cut, try to resynthesize it
-        nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim, timeDC, nSubgraphsDC );
+        nGain = rwrNodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, pSim, timeDCSim );
 
         if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
             continue;
@@ -1173,7 +1160,6 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
         if ( fCompl ) Dec_GraphComplement( pGraph );
 clk = Abc_Clock();
         Dec_GraphUpdateNetwork( pNode, pGraph, fUpdateLevel, nGain );
-Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
         if ( fCompl ) Dec_GraphComplement( pGraph );
 
         // use the array of changed nodes to update placement
@@ -1187,11 +1173,13 @@ Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
 //             return 0;
 //         }  
         // update simulation mgr
-clk = Abc_Clock();
+clk2 = Abc_Clock();
         smlSimulateStop(pSim);
+        Aig_ManStop(pAig);
         pAig = Abc_NtkToDar(pNtk, 0, 0);
         pSim = smlSimulateStart(pAig, simFileName);
-timeDC += Abc_Clock() - clk;
+timeDCUpdate += Abc_Clock() - clk2;
+Rwr_ManAddTimeUpdate( pManRwr, Abc_Clock() - clk );
     }
     Extra_ProgressBarStop( pProgress );
 Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
@@ -1199,13 +1187,29 @@ Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
     pManRwr->nNodesEnd = Abc_NtkNodeNum(pNtk);
     if ( fVerbose )
     {
-        Rwr_ManPrintStats( pManRwr );
-        printf("DC Related Statistics:\n");
-        printf( "Extra subgraphs   = %8d. (%6.2f %%).\n", nSubgraphsDC, 100.0*(nSubgraphsDC) / pManRwr->nSubgraphs );
-        ABC_PRT( "    DC      ", timeDC ); // report stats, ~1/2 of total, over half spent on updating pSim
+        int nClass, nClassCounter = 0;
+        for (nClass = 0; nClass < 222; nClass++ )
+            nClassCounter += (pManRwr->nScores[nClass] > 0);
+
+        printf(  "> Rewriting statistics:\n" );
+        printf(  "  Total cuts tries  = %8d.\n", pManRwr->nCutsGood );
+        printf(  "  Bad cuts found    = %8d.\n", pManRwr->nCutsBad );
+        printf(  "  Total subgraphs   = %8d.\n", pManRwr->nSubgraphs );
+        printf(  "  Used NPN classes  = %8d.\n", nClassCounter );
+        printf(  "  Nodes considered  = %8d.\n", pManRwr->nNodesConsidered );
+        printf(  "  Nodes rewritten   = %8d.\n", pManRwr->nNodesRewritten );
+        printf(  "  Gain              = %8d. (%6.2f %%).\n", pManRwr->nNodesBeg - pManRwr->nNodesEnd, 100.0*(pManRwr->nNodesBeg - pManRwr->nNodesEnd)/pManRwr->nNodesBeg );
+        ABC_PRT( "  Start         ", pManRwr->timeStart );
+        ABC_PRT( "  Cuts          ", pManRwr->timeCut );
+        ABC_PRT( "  Resynthesis   ", pManRwr->timeRes );
+        ABC_PRT( "      Sim DC    ", timeDCSim );
+        ABC_PRT( "      Mffc      ", pManRwr->timeMffc );
+        ABC_PRT( "      Eval      ", pManRwr->timeEval );
+        ABC_PRT( "  Update        ", pManRwr->timeUpdate );
+        ABC_PRT( "      Update DC ", pManRwr->timeUpdate );
+        ABC_PRT( "  Total         ", pManRwr->timeTotal );
     }
         
-//        Rwr_ManPrintStatsFile( pManRwr );
     if ( fVeryVerbose )
         Rwr_ScoresReport( pManRwr );
     // delete the managers

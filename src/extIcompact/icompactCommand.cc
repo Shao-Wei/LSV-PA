@@ -212,8 +212,6 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     /////////////////////////////////////////////////////////
     // Start Main
     /////////////////////////////////////////////////////////
-    printf("[Info] IcompactMgr start\n");
-    
     mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
     if(fExperiment > 0)
         mgr->performExp(fExperiment);
@@ -224,12 +222,6 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     delete mgr;
 
-    /////////////////////////////////////////////////////////
-    // Print Evaluation
-    /////////////////////////////////////////////////////////
-    printf("[Info] Print output files & evaluation\n");
-
-    ////////////////////////////////////////////////////////
     return result;
     
 usage:
@@ -324,7 +316,7 @@ static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int c            = 0;
 
     FILE * pFile;
-    Abc_Ntk_t *pNtk, *pNtkNew;
+    Abc_Ntk_t *pNtk;
     char *verifyFileName;
 
     pNtk = Abc_FrameReadNtk(pAbc);
@@ -364,8 +356,8 @@ static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtkNew = ntkSTFault(pNtk, verifyFileName, 1);
-    Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
+    ntkSTFault(pNtk, verifyFileName, 1);
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
     return result;
     
@@ -383,7 +375,7 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int c            = 0;
 
     FILE * pFile;
-    Abc_Ntk_t *pNtk, *pNtkNew;
+    Abc_Ntk_t *pNtk;
     char *verifyFileName;
 
     pNtk = Abc_FrameReadNtk(pAbc);
@@ -423,8 +415,8 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtkNew = ntkSignalMerge(pNtk, verifyFileName, 1);
-    Abc_FrameReplaceCurrentNetwork(pAbc, pNtkNew);
+    ntkSignalMerge(pNtk, verifyFileName, 1);
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
     return result;
     
