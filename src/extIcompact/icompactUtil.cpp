@@ -282,9 +282,9 @@ void removeSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
         if(Aig_ObjIsBuf(pFanout))
         {
             pFanout->Type = AIG_OBJ_AND;
-            Vec_PtrRemove( pAig->vBufs, pFanout);
-            pAig->nObjs[AIG_OBJ_AND]++;
-            pAig->nObjs[AIG_OBJ_BUF]--;
+            // Vec_PtrRemove( pAig->vBufs, pFanout);
+            // pAig->nObjs[AIG_OBJ_AND]++;
+            // pAig->nObjs[AIG_OBJ_BUF]--;
         }   
 
         if(pNewFanin0 == NULL)
@@ -358,12 +358,12 @@ void insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
                     if(Aig_ObjIsAnd(pFanout))
                     {
                         pFanout->Type = AIG_OBJ_BUF;
-                        Vec_PtrPush( pAig->vBufs, pFanout);
-                        pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
-                        pAig->nObjs[AIG_OBJ_AND]--;
-                        pAig->nObjs[AIG_OBJ_BUF]++;
+                        // Vec_PtrPush( pAig->vBufs, pFanout);
+                        // pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
+                        // pAig->nObjs[AIG_OBJ_AND]--;
+                        // pAig->nObjs[AIG_OBJ_BUF]++;
                     }
-                    pNewFanin0 = (Aig_ObjFaninC0(pFanout) || Aig_ObjFaninC1(pFanout))? Aig_ManConst0(pAig): Aig_ManConst1(pAig);
+                    pNewFanin0 = (Aig_ObjFaninC0(pFanout) ^ Aig_ObjFaninC1(pFanout))? Aig_ManConst0(pAig): Aig_ManConst1(pAig);
                     pNewFanin1 = NULL;
                 }
             }       
@@ -374,7 +374,7 @@ void insertSTFault(Aig_Man_t * pAig, Aig_Obj_t * pObj, vector< pair<Aig_Obj_t*, 
 
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
 {
-    extern int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
+    extern int smlSTFaultCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj;
@@ -388,7 +388,7 @@ clkStart = Abc_Clock();
     Aig_ManFanoutStart(pAig);
     if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
-        printf("Bad pNtk / sim file pair\n");
+        printf("Bad pNtk / sim file pair at ntk STF\n");
         Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
@@ -397,7 +397,7 @@ clkStart = Abc_Clock();
 clk = Abc_Clock();
     // find candidate STF
     vector< pair<int, int> > vCandidate;
-    smlSTFaultCandidate(pAig, simFileName, vCandidate); // candidate in reverse topological order
+    smlSTFaultCandidate2(pAig, simFileName, vCandidate); // candidate in reverse topological order
     if(vCandidate.size() == 0)
     {
         printf("No STF candidate\n");
@@ -436,7 +436,7 @@ timeVerify += Abc_Clock() - clk;
     sizeNew = Abc_NtkNodeNum(pNtkNew);
 
     // make sure everything is okay
-    if ( !Abc_NtkCheck( pNtkNew ) )
+    if ( !ntkVerifySamples(pNtkNew, simFileName, 1) || !Abc_NtkCheck( pNtkNew ) )
     {
         printf( "The network check has failed.\n" );
         Abc_NtkDelete( pNtkNew );
@@ -483,9 +483,9 @@ void signalUnMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vecto
         if(Aig_ObjIsBuf(pFanout))
         {
             pFanout->Type = AIG_OBJ_AND;
-            Vec_PtrRemove( pAig->vBufs, pFanout);
-            pAig->nObjs[AIG_OBJ_AND]++;
-            pAig->nObjs[AIG_OBJ_BUF]--;
+            // Vec_PtrRemove( pAig->vBufs, pFanout);
+            // pAig->nObjs[AIG_OBJ_AND]++;
+            // pAig->nObjs[AIG_OBJ_BUF]--;
         }   
 
         if(pNewFanin0 == NULL)
@@ -560,10 +560,10 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
                     if(Aig_ObjIsAnd(pFanout))
                     {
                         pFanout->Type = AIG_OBJ_BUF;
-                        Vec_PtrPush( pAig->vBufs, pFanout);
-                        pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
-                        pAig->nObjs[AIG_OBJ_AND]--;
-                        pAig->nObjs[AIG_OBJ_BUF]++;
+                        // Vec_PtrPush( pAig->vBufs, pFanout);
+                        // pAig->nBufMax = Abc_MaxInt( pAig->nBufMax, Vec_PtrSize(pAig->vBufs) );
+                        // pAig->nObjs[AIG_OBJ_AND]--;
+                        // pAig->nObjs[AIG_OBJ_BUF]++;
                     }
                     pNewFanin0 = (Aig_ObjFaninC0(pFanout) ^ Aig_ObjFaninC1(pFanout))? Aig_Not(Aig_Regular(pObj1)): Aig_Regular(pObj1);
                     pNewFanin1 = NULL;
@@ -576,7 +576,7 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
 
 Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
 {
-    extern int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
+    extern int smlSignalMergeCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
     int nSuccess = 0, nSkipped = 0;
     Abc_Ntk_t * pNtkNew;
     Aig_Obj_t * pObj1, * pObj2;
@@ -590,7 +590,7 @@ clkStart = Abc_Clock();
     Aig_ManFanoutStart(pAig);
     if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
-        printf("Bad pNtk / sim file pair\n");
+        printf("Bad pNtk / sim file pair at ntk Merge\n");
         Aig_ManFanoutStop(pAig);
         Aig_ManStop(pAig);
         return pNtk;
@@ -599,7 +599,7 @@ clkStart = Abc_Clock();
 clk = Abc_Clock();
     // find candidate merge signals
     vector< pair<int, int> > vCandidate;
-    smlSignalMergeCandidate(pAig, simFileName, vCandidate); // candidate in topological order
+    smlSignalMergeCandidate2(pAig, simFileName, vCandidate); // candidate in topological order
     if(vCandidate.size() == 0)
     {
         printf("No signal merge candidate\n");
@@ -627,7 +627,6 @@ clk = Abc_Clock();
 //             printf("Node %i merged to node %i\n", Aig_Regular(pObj2)->Id, Aig_Regular(pObj1)->Id);
             Aig_ManCleanup(pAig);
             nSuccess++;
-            continue;
         }       
         else
         {
@@ -636,6 +635,108 @@ clk = Abc_Clock();
 timeVerify += Abc_Clock() - clk;
     }
     Aig_ManCleanup(pAig);
+    pNtkNew = Abc_NtkFromDar(pNtk, pAig);
+    pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
+    sizeNew = Abc_NtkNodeNum(pNtkNew);
+    // printf("Network size: %i / %i\n", Abc_NtkNodeNum(pNtkNew), Abc_NtkNodeNum(pNtk));
+
+    // make sure everything is okay
+//     if(!ntkVerifySamples(pNtkNew, simFileName, 0))
+//     {
+//         printf("The simulation check has failed.\n");
+//         return NULL;
+//     }
+    if ( !Abc_NtkCheck( pNtkNew ) )
+    {
+        printf( "The network check has failed.\n" );
+        Abc_NtkDelete( pNtkNew );
+        Aig_ManFanoutStop(pAig);
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
+timeTotal += Abc_Clock() - clkStart;
+    // report stats
+    if(fVerbose)
+    {
+        printf( "> Signal Merging Statistics:\n");
+        printf( "  Total Mergings    = %i (%i skipped) / %lu.\n", nSuccess, nSkipped, vCandidate.size());
+        printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
+        ABC_PRT( "  Candidate   ", timeCand );
+        ABC_PRT( "  Verify      ", timeVerify );
+        ABC_PRT( "  Total       ", timeTotal );
+    }
+    // clean up
+    Aig_ManFanoutStop(pAig);
+    Aig_ManStop(pAig);
+    Abc_NtkDelete(pNtk);
+    return pNtkNew;
+}
+
+Abc_Ntk_t * ntkSignalMerge2(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
+{
+    extern int smlSignalMergeCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate);
+    int nSuccess = 0, nSkipped = 0;
+    Abc_Ntk_t * pNtkNew;
+    Aig_Man_t * pAig;
+    Aig_Obj_t * pObj1, * pObj2;
+    int sizeOld = Abc_NtkNodeNum(pNtk), sizeNew;
+    abctime clk, clkStart, timeCand = 0, timeVerify = 0, timeTotal = 0;
+    assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
+
+clkStart = Abc_Clock();    
+    pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
+    pAig = Abc_NtkToDar(pNtk, 0, 0);
+    Aig_ManFanoutStart(pAig);
+    if(!smlVerifyCombGiven(pAig, simFileName, 0))
+    {
+        printf("Bad pNtk / sim file pair at ntk Merge\n");
+        Aig_ManFanoutStop(pAig);
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
+clk = Abc_Clock();
+    // find candidate merge signals
+    vector< pair<int, int> > vCandidate;
+    smlSignalMergeCandidate2(pAig, simFileName, vCandidate); // candidate in topological order
+    if(vCandidate.size() == 0)
+    {
+        printf("No signal merge candidate\n");
+        Aig_ManFanoutStop(pAig);
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+timeCand += Abc_Clock() - clk;
+    for(int i=vCandidate.size()-1; i>=0; i--)
+    {
+        pObj1 = Aig_ManObj(pAig, vCandidate[i].first);
+        pObj2 = Aig_ManObj(pAig, vCandidate[i].second);
+        if(pObj1 == NULL || pObj2 == NULL) // removed by previous merging
+        {
+            nSkipped++;
+            continue;
+        }
+        if ( pObj2 == Aig_ObjFanin0(pObj1) || pObj2 == Aig_ObjFanin1(pObj1) )
+        {
+            nSkipped++;
+            continue;
+        }
+        printf("pObj1 = %i, pObj2 = %i\n", Aig_ObjId(pObj1), Aig_ObjId(pObj2));
+        printf("PO 134 fanin = %i, phase = %i\n", Aig_ObjFaninId0(Aig_ManCo(pAig, 134)), Aig_ObjFaninC0(Aig_ManCo(pAig, 134)) );
+        Aig_ObjDisconnect(pAig, pObj2);
+        pObj2->Type = AIG_OBJ_BUF;
+        Aig_ObjConnect( pAig, pObj2, pObj1, NULL );
+        if(!smlVerifyCombGiven(pAig, simFileName, 0)) { printf("Wrong here.\n"); }
+        Aig_ManCleanup(pAig);
+        printf("PO 134 fanin = %i, phase = %i\n", Aig_ObjFaninId0(Aig_ManCo(pAig, 134)), Aig_ObjFaninC0(Aig_ManCo(pAig, 134)) );
+        if(!smlVerifyCombGiven(pAig, simFileName, 1))
+        {
+            printf("Error after merging %i\n", i);
+            break;
+        }
+    }
+
     pNtkNew = Abc_NtkFromDar(pNtk, pAig);
     pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
     sizeNew = Abc_NtkNodeNum(pNtkNew);
@@ -1094,7 +1195,7 @@ int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose,
     pAig = Abc_NtkToDar(pNtk, 0, 0);
     if(!smlVerifyCombGiven(pAig, simFileName, 0))
     {
-        printf("Bad pNtk / sim file pair\n");
+        printf("Bad pNtk / sim file pair at ntk Rewrite\n");
         Aig_ManStop(pAig);
         return 0;
     }

@@ -158,7 +158,7 @@ clk = Abc_Clock();
 timeCompact += Abc_Clock() - clk;
 
 clk = Abc_Clock();
-    pNtk = constructNtkEach(minMaskList, 0);
+    pNtk = constructNtkEach(minMaskList, 1);
     if(pNtk == NULL) { _fMgr = CONSTRUCT_NTK_FAIL; return 0; }
 timeConstruct += Abc_Clock() - clk;
 
