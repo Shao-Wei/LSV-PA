@@ -310,6 +310,67 @@ usage:
     return 1;
 }
 
+static int ntkMinimize_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    int result       = 0;
+    int c            = 0;
+    int fCompress    = 0;
+    
+    int sizeOld = 0, sizeNew = 0;
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+
+    char dc2Command[100]    = "dc2;";
+
+    // set defaults
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "ch" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'c':
+            fCompress ^= 1;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
+        return 1;
+    }
+
+    sizeOld = Abc_NtkNodeNum(pNtk);
+    while(1)
+    {
+        if(Cmd_CommandExecute(pAbc,dc2Command))
+        {
+            printf("Failed to execute minimize commands.\n");
+            return 1;
+        }
+        sizeNew = Abc_NtkNodeNum( Abc_FrameReadNtk(pAbc) );
+        if(sizeNew >= sizeOld)
+            break;
+        sizeOld = sizeNew;
+    }
+  
+    return result;
+    
+usage:
+    Abc_Print( -2, "usage: ntkmin [-h] \n" );
+    Abc_Print( -2, "\t         minimization scripts\n" );
+    Abc_Print( -2, "\t-h     : print the command usage\n");
+    return 1;
+}
+
+
 static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -961,6 +1022,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "gencareset", gencareset_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "compact", compact_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "ntkmin", ntkMinimize_Command, 1);    
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "aigrewrite", aigRewrite_Command, 1);

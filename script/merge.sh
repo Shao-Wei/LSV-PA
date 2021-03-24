@@ -1,0 +1,5 @@
+./../abc -c "r ../samples/c1908.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c1908.128.c00.v01.samples.pla; ps; ntkmin; ps;"
+./../abc -c "r ../samples/c2670.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c2670.128.c00.v01.samples.pla; ps; ntkmin; ps;"
+./../abc -c "r ../samples/c3540.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c3540.128.c00.v01.samples.pla; ps; ntkmin; ps;"
+./../abc -c "r ../samples/c5315.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c5315.128.c00.v01.samples.pla; ps; ntkmin; ps;"
+./../abc -c "r ../samples/c7552.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c7552.128.c00.v01.samples.pla; ps; ntkmin; ps;"
