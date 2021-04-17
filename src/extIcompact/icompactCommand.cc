@@ -370,7 +370,6 @@ usage:
     return 1;
 }
 
-
 static int ntkSTFault_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
@@ -476,7 +475,7 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    ntkSignalMerge(pNtk, verifyFileName, 1);
+    ntkSignalMerge3(pNtk, verifyFileName, 1);
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
     return result;

@@ -775,6 +775,92 @@ timeTotal += Abc_Clock() - clkStart;
     return pNtkNew;
 }
 
+extern "C" { Vec_Ptr_t * Aig_ManDfs( Aig_Man_t * p, int fNodesOnly ); }
+Abc_Ntk_t * ntkSignalMerge3(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
+{
+    extern Vec_Ptr_t* smlSignalMergeCandidate3( Aig_Man_t * pAig, char * pFileName);
+    
+    int nSuccess = 0, nClass = 0;
+    Abc_Ntk_t * pNtkNew;
+    Aig_Obj_t * pTarget, * pObj;
+    Vec_Ptr_t* vClassInfo;
+    int sizeOld = Abc_NtkNodeNum(pNtk), sizeNew, i;
+    abctime clk, clkStart, timeCand = 0, timeTotal = 0;
+    assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
+    if(!ntkVerifySamples(pNtk, simFileName, 0))
+    {
+        printf("Bad pNtk / sim file pair at ntk Merge\n");
+        return NULL;
+    }
+
+clkStart = Abc_Clock();    
+    pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
+    Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
+    Aig_ManFanoutStart(pAig);
+    
+clk = Abc_Clock();
+    // find candidate merge signals
+    vClassInfo = smlSignalMergeCandidate3(pAig, simFileName);
+    if(Vec_PtrSize(vClassInfo) == 0)
+    {
+        printf("No signal merge candidate\n");
+        Vec_PtrFree(vClassInfo);
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+timeCand += Abc_Clock() - clk;
+    // printf("Init >> 0: %i, 1: %i, 2: %i, 3: %i, 4: %i, 5: %i, 6: %i, 7: %i\n", pAig->nObjs[0], pAig->nObjs[1], pAig->nObjs[2], pAig->nObjs[3], pAig->nObjs[4], pAig->nObjs[5], pAig->nObjs[6], pAig->nObjs[7]);
+    Vec_PtrForEachEntry(Aig_Obj_t*, vClassInfo, pObj, i)
+    {
+        pTarget = Aig_ManObj(pAig, i);
+        if(pTarget == NULL) { continue; }
+        if(!Aig_ObjIsNode(pTarget)) { continue; }
+
+        pTarget->nRefs++;
+        while(pObj != NULL)
+        {
+            printf("Replace %i w/ %i\n", pObj->Id, pTarget->Id);
+            Aig_ObjReplace(pAig, pObj, pTarget, 0);
+            Aig_ManDfs(pAig, 1);
+            nSuccess++;
+            pObj = (Aig_Obj_t*)Vec_PtrGetEntry(vClassInfo, pObj->Id);
+        }
+        pTarget->nRefs--;
+        nClass++;
+    }
+    Aig_ManCleanup(pAig);
+    printf("Init >> 0: %i, 1: %i, 2: %i, 3: %i, 4: %i, 5: %i, 6: %i, 7: %i\n", pAig->nObjs[0], pAig->nObjs[1], pAig->nObjs[2], pAig->nObjs[3], pAig->nObjs[4], pAig->nObjs[5], pAig->nObjs[6], pAig->nObjs[7]);
+    pNtkNew = Abc_NtkFromDar(pNtk, pAig);
+    pNtkNew = Abc_NtkStrash(pNtkNew, 0, 0, 0);
+    sizeNew = Abc_NtkNodeNum(pNtkNew);
+
+    // make sure everything is okay
+    if ( !Abc_NtkCheck( pNtkNew ) || !ntkVerifySamples(pNtkNew, simFileName, 0) )
+    {
+        printf( "The network check has failed.\n" );
+        Abc_NtkDelete( pNtkNew );
+        Aig_ManStop(pAig);
+        return pNtk;
+    }
+
+timeTotal += Abc_Clock() - clkStart;
+    // report stats
+    if(fVerbose)
+    {
+        printf( "> Signal Merging Statistics:\n");
+        printf( "  Total Mergings    = %i (%i EQ classes).\n", nSuccess, nClass);
+        printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
+        ABC_PRT( "  Candidate   ", timeCand );
+        ABC_PRT( "  Total       ", timeTotal );
+    }
+    // clean up
+    Vec_PtrFree(vClassInfo);
+    Aig_ManFanoutStop(pAig);
+    Aig_ManStop(pAig);
+    Abc_NtkDelete(pNtk);
+    return pNtkNew;
+}
+
 /////////////////////////////////////////////////////////
 // Rewrite
 // Modified from abcRewrite.c to support 1. external careset 
