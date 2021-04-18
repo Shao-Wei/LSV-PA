@@ -527,6 +527,7 @@ int smlSTFaultCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, 
     return 0;
 }
 
+// return candidates as (pTarget, pObj) pairs, consider only first 4096 patterns
 int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate)
 {
     Vec_Str_t * vSimInfo, * vSimPart;
@@ -585,6 +586,7 @@ int smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<in
     return 0;
 }
 
+// return candidates as (pTarget, pObj) pairs, consider all patterns
 int smlSignalMergeCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, int> >& vCandidate)
 {
     Vec_Str_t * vSimInfo;
@@ -707,13 +709,109 @@ Vec_Ptr_t* smlSignalMergeCandidate3( Aig_Man_t * pAig, char * pFileName)
                 it = targets.find(key);
                 if(it != targets.end())
                 {
-                    assert(Vec_PtrGetEntry(vClassInfo, it->second->Id) == NULL);
+//                     if(pObj->Id > 57 && pObj->Id < 64)
+//                         printf("Reached %i. Attached to %i\n", pObj->Id, it->second->Id);
                     Vec_PtrWriteEntry(vClassInfo, it->second->Id, pObj);
-                    targets[key] = pObj;
-                } 
-                else
-                    targets[key] = pObj;
-                
+                }  
+                targets[key] = pObj;
+                pNext = (Aig_Obj_t*)Vec_PtrGetEntry(vClassInfo, pObj->Id);
+                Vec_PtrWriteEntry(vClassInfo, pObj->Id, NULL);
+                pObj = pNext;
+            }
+        }
+        Vec_StrFree( vSimPart );
+        Fra_SmlStop( pSim );
+        Aig_ManForEachNode(pAig, pObj, i)
+            pObj->iData = 0;
+    }
+    Vec_StrFree( vSimInfo );
+    return vClassInfo;
+}
+
+// returns vector of target Aig_Obj_t where eq class are in linked list, consider ODC
+Vec_Ptr_t* smlSignalMergeCandidate4( Aig_Man_t * pAig, char * pFileName)
+{
+    Vec_Str_t * vSimInfo, * vSimPart;
+    Fra_Sml_t * pSim = NULL;
+    int nPatterns, nPart, nPatPerSim, patLen;
+    Aig_Obj_t * pObj, * pNext;
+    int i, pPrev = -1;
+    unsigned int * info;
+
+    // initial EQ class
+    Vec_Ptr_t * vClassInfo = Vec_PtrAlloc(0);
+    for(i=0; i<Aig_ManObjNumMax(pAig); i++)
+        Vec_PtrPush(vClassInfo, NULL); 
+    Aig_ManForEachNode(pAig, pObj, i)
+    {
+        if(pPrev == -1) { pPrev = i; continue; }
+        Vec_PtrWriteEntry(vClassInfo, pPrev, pObj); 
+        pPrev = i;
+    }
+
+    vSimInfo = smlSimulateReadFile( pFileName, 5 );
+    if ( vSimInfo == NULL )
+        return 0;
+
+    patLen = Aig_ManCiNum(pAig)+Aig_ManCoNum(pAig);
+    if ( Vec_StrSize(vSimInfo) % patLen != 0 )
+    {
+        printf( "File \"%s\": The number of binary digits (%d) is not divisible by the number of pi (%d) + po (%d).\n", 
+            pFileName, Vec_StrSize(vSimInfo), Aig_ManCiNum(pAig), Aig_ManCoNum(pAig) );
+        Vec_StrFree( vSimInfo );
+        return 0;
+    }
+
+    // avoid seg fault: divide pattern to 128 frames per simulation
+    nPatPerSim = 4096;
+    nPatterns = Vec_StrSize(vSimInfo) / patLen;
+    for (int n=0; n<=(nPatterns/nPatPerSim); n++)
+    {
+        nPart = (n==(nPatterns/nPatPerSim))? (nPatterns%nPatPerSim): nPatPerSim;
+        if (nPart == 0) { break; }
+        pSim = Fra_SmlStart( pAig, 0, 1, Abc_BitWordNum(nPart) );
+        vSimPart = Vec_StrAlloc(0);
+        for (int l=n*patLen*nPart; l<(n+1)*patLen*nPart; l++)
+            Vec_StrPush(vSimPart, Vec_StrEntry(vSimInfo, l));
+        
+        // start simulation
+        smlInitializeGiven( pSim, vSimPart );
+        Fra_SmlSimulateOne( pSim );
+        
+        // refine EQ classes
+        Aig_ManForEachNode(pAig, pObj, i)
+        {
+            pObj->iData = 0;
+        }   
+        Aig_ManForEachNode(pAig, pObj, i)
+        {
+            if(pObj->iData != 0) // seen before
+                continue;
+            map< vector<unsigned int>, Aig_Obj_t*> targets;
+            map< vector<unsigned int>, Aig_Obj_t*>::iterator it;
+            while(pObj != NULL)
+            {
+                pObj->iData = 1;
+                info = Fra_ObjSim( pSim, pObj->Id );
+                vector<unsigned int> key;
+                for(int k=0; k<pSim->nWordsTotal; k++)
+                    key.push_back(info[k]);
+
+                // compute don't care patterns    
+                unsigned int * uAlter = new unsigned int[pSim->nWordsTotal]();
+                simFlipOneNode(uAlter, pSim, pObj);
+                for(int k=0; k<pSim->nWordsTotal; k++)
+                    key[k] &= uAlter[k];
+                delete [] uAlter;
+
+                it = targets.find(key);
+                if(it != targets.end())
+                {
+//                     if(pObj->Id > 57 && pObj->Id < 64)
+//                         printf("Reached %i. Attached to %i\n", pObj->Id, it->second->Id);
+                    Vec_PtrWriteEntry(vClassInfo, it->second->Id, pObj);
+                }  
+                targets[key] = pObj;
                 pNext = (Aig_Obj_t*)Vec_PtrGetEntry(vClassInfo, pObj->Id);
                 Vec_PtrWriteEntry(vClassInfo, pObj->Id, NULL);
                 pObj = pNext;

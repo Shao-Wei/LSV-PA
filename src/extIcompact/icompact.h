@@ -223,7 +223,7 @@ int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
 int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose); // modifies src/aig/aig/aigTable.c Aig_TableLookUp() to avoid assertion fail
 Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose);
-Abc_Ntk_t * ntkSignalMerge2 (Abc_Ntk_t * pNtk, char * simFileName, int fVerbose);
+Abc_Ntk_t * ntkSignalMerge2 (Abc_Ntk_t * pNtk, char * simFileName, int fDC, int fVerbose);
 Abc_Ntk_t * ntkSignalMerge3(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose);
 int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName );
 

@@ -475,7 +475,8 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    ntkSignalMerge3(pNtk, verifyFileName, 1);
+    pNtk = ntkSignalMerge2(pNtk, verifyFileName, 0, 1); // merge w/o considering ODC
+    // pNtk = ntkSignalMerge2(pNtk, verifyFileName, 1, 1); // merge considering ODC
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
     return result;
