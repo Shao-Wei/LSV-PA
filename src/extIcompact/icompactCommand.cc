@@ -489,6 +489,158 @@ usage:
     return 1;
 }
 
+static int ntkResub_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv)
+{
+    FILE * pFile;
+    char *verifyFileName;
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
+    int RS_CUT_MIN =  4;
+    int RS_CUT_MAX = 16;
+    int c;
+    int nCutsMax;
+    int nNodesMax;
+    int nLevelsOdc;
+    int fUpdateLevel;
+    int fUseZeros;
+    int fVerbose;
+    int fVeryVerbose;
+
+    // set defaults
+    nCutsMax     =  8;
+    nNodesMax    =  1;
+    nLevelsOdc   =  0;
+    fUpdateLevel =  1;
+    fUseZeros    =  0;
+    fVerbose     =  0;
+    fVeryVerbose =  0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "KNFlzvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'K':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-K\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nCutsMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nCutsMax < 0 )
+                goto usage;
+            break;
+        case 'N':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nNodesMax = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nNodesMax < 0 )
+                goto usage;
+            break;
+        case 'F':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-F\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            nLevelsOdc = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if ( nLevelsOdc < 0 )
+                goto usage;
+            break;
+        case 'l':
+            fUpdateLevel ^= 1;
+            break;
+        case 'z':
+            fUseZeros ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'w':
+            fVeryVerbose ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( argc != globalUtilOptind + 1 )
+    {
+        goto usage;
+    }
+
+    // get the input file name
+    verifyFileName = argv[globalUtilOptind];
+    if ( (pFile = fopen( verifyFileName, "r" )) == NULL )
+    {
+        Abc_Print( -1, "Cannot open input file \"%s\". ", verifyFileName );
+        if ( (verifyFileName = Extra_FileGetSimilarName( verifyFileName, ".mv", ".blif", ".pla", ".eqn", ".bench" )) )
+            Abc_Print( 1, "Did you mean \"%s\"?", verifyFileName );
+        Abc_Print( 1, "\n" );
+        return 1;
+    }
+    fclose(pFile);
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( nCutsMax < RS_CUT_MIN || nCutsMax > RS_CUT_MAX )
+    {
+        Abc_Print( -1, "Can only compute cuts for %d <= K <= %d.\n", RS_CUT_MIN, RS_CUT_MAX );
+        return 1;
+    }
+    if ( nNodesMax < 0 || nNodesMax > 3 )
+    {
+        Abc_Print( -1, "Can only resubstitute at most 3 nodes.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
+        return 1;
+    }
+    if ( Abc_NtkGetChoiceNum(pNtk) )
+    {
+        Abc_Print( -1, "AIG resynthesis cannot be applied to AIGs with choice nodes.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    if ( !ntkResubstitute( pNtk, nCutsMax, nNodesMax, nLevelsOdc, fUpdateLevel, fVerbose, fVeryVerbose, verifyFileName ) )
+    {
+        Abc_Print( -1, "Resubstitute has failed.\n" );
+        return 1;
+    }
+    if(!ntkVerifySamples(Abc_FrameReadNtk(pAbc), verifyFileName, 1))
+    {
+        Abc_Print( -1, "Verifying has failed.\n" );
+        return 1;
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: ntkresub [-KN <num>] [-lzvwh] <file>\n" );
+    Abc_Print( -2, "\t           performs technology-independent restructuring of the AIG\n" );
+    Abc_Print( -2, "\t-K <num> : the max cut size (%d <= num <= %d) [default = %d]\n", RS_CUT_MIN, RS_CUT_MAX, nCutsMax );
+    Abc_Print( -2, "\t-N <num> : the max number of nodes to add (0 <= num <= 3) [default = %d]\n", nNodesMax );
+    Abc_Print( -2, "\t-F <num> : the number of fanout levels for ODC computation [default = %d]\n", nLevelsOdc );
+    Abc_Print( -2, "\t-l       : toggle preserving the number of levels [default = %s]\n", fUpdateLevel? "yes": "no" );
+    Abc_Print( -2, "\t-z       : toggle using zero-cost replacements [default = %s]\n", fUseZeros? "yes": "no" );
+    Abc_Print( -2, "\t-v       : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
+    Abc_Print( -2, "\t-w       : toggle verbose printout of ODC computation [default = %s]\n", fVeryVerbose? "yes": "no" );
+    Abc_Print( -2, "\t<file>   : file with the given patterns\n");
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
 static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
 {
     Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
@@ -1026,6 +1178,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "aigrewrite", aigRewrite_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "ntkresub", ntkResub_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
 //    Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "readplabatch", readplabatch_Command, 1); // helper

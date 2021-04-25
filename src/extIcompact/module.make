@@ -6,3 +6,4 @@ SRC += src/extIcompact/icompactGencareset.cpp
 SRC += src/extIcompact/icompactSolve.cpp
 SRC += src/extIcompact/icompactUtil.cpp
 SRC += src/extIcompact/icompactExperiment.cpp
+SRC += src/extIcompact/icompactResub.cpp
