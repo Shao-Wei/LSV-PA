@@ -148,6 +148,7 @@ int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOd
     pManCut = Abc_NtkManCutStart( nCutMax, 100000, 100000, 100000 );
     pManRes = Abc_ManResubStart( nCutMax, ABC_RS_DIV1_MAX );
     pSim = smlSimulateStart(pAig, simFileName);
+
     pManRes->nWords = pSim->nWordsFrame; // modify to consider all patterns
     uAlter = new unsigned int[pSim->nWordsTotal](); 
 
@@ -213,18 +214,17 @@ pManRes->timeNtk += Abc_Clock() - clk;
         Aig_ManStop(pAig);
         pAig = Abc_NtkToDar(pNtk, 0, 0);
         pSim = smlSimulateStart(pAig, simFileName);
-/*
-        if(!smlVerifyCombGiven(pAig, simFileName, 0))
+        /*
+        if(!smlVerifyCombGiven(pAig, simFileName, 1))
         {
-            for(int k=0; k<(pSim->nWordsFrame << 5); k++)
-            {
+            printf("Wrong here\n");
+            for(int k = 0; k<pSim->nWordsFrame; k++)
                 if(Abc_InfoHasBit(uAlter, k))
                     printf(", %i", k);
-            }
-            printf("\nWrong Here.\n");
+            printf("\n");
             return 0;
         }
-*/
+        */
     }
     Extra_ProgressBarStop( pProgress );
 pManRes->timeTotal = Abc_Clock() - clkStart;
@@ -598,6 +598,7 @@ Dec_Graph_t * Abc_ManResubQuit1( Abc_Obj_t * pRoot, Abc_Obj_t * pObj0, Abc_Obj_t
     Dec_GraphSetRoot( pGraph, eRoot );
     if ( pRoot->fPhase )
         Dec_GraphComplement( pGraph );
+        
     return pGraph;
 }
 
@@ -957,15 +958,18 @@ Dec_Graph_t * manResubQuit( Abc_ManRes_t * p, Fra_Sml_t * pSim )
 {
     Dec_Graph_t * pGraph;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
-    unsigned * upData = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    unsigned * puDataR;
+    unsigned cR;
+    puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
     int w;
     for ( w = 0; w < p->nWords; w++ )
-        if ( upData[w] & p->pCareSet[w] )
+        if ( (puDataR[w] ^ cR) & p->pCareSet[w] )
             break;
     if ( w != p->nWords )
         return NULL;
     // get constant node graph
-    if ( Aig_ObjPhase(pRoot) )
+    if ( p->pRoot->fPhase )
         pGraph = Dec_GraphCreateConst1();
     else 
         pGraph = Dec_GraphCreateConst0();
@@ -974,16 +978,20 @@ Dec_Graph_t * manResubQuit( Abc_ManRes_t * p, Fra_Sml_t * pSim )
 
 Dec_Graph_t * manResubDivs0( Abc_ManRes_t * p, Fra_Sml_t * pSim )
 {
+    extern void printBits(size_t const size, void const * const ptr);
     Abc_Obj_t * pObj;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
     unsigned * puData, * puDataR;
+    unsigned c, cR;
     int i, w;
     puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
     Vec_PtrForEachEntryStop( Abc_Obj_t *, p->vDivs, pObj, i, p->nDivs )
     {
         puData = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)pObj->pCopy)));
+        c = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj)->pCopy) ^ (pObj->fPhase) )? -1: 0;
         for ( w = 0; w < p->nWords; w++ )
-            if ( (puData[w] ^ puDataR[w]) & p->pCareSet[w] )
+            if ( ((puData[w] ^ c) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] )
                 break;
         if ( w == p->nWords )
             return Abc_ManResubQuit0( p->pRoot, pObj );
@@ -993,47 +1001,45 @@ Dec_Graph_t * manResubDivs0( Abc_ManRes_t * p, Fra_Sml_t * pSim )
 
 Dec_Graph_t * manResubDivs1( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
 {
+    extern void printBits(size_t const size, void const * const ptr);
     Abc_Obj_t * pObj0, * pObj1;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
     unsigned * puData0, * puData1, * puDataR; 
-// unsigned * puDataRTmp, * puDataR = new unsigned[p->nWords];
+    unsigned c0, c1, cR;
     int i, k, w;
     puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
-//     if(Aig_ObjPhase(pRoot))
-//         printf("  pRoot phase = 1\n");
-//     puDataRTmp = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
-//     for ( w = 0; w < p->nWords; w++ )
-//         puDataR[w] = (Aig_ObjPhase(pRoot))? ~puDataRTmp[w]: puDataRTmp[w];
-
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
 //     check positive unate divisors
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UP, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UP, pObj1, k, i + 1 )
         {
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) )
             {
                 for ( w = 0; w < p->nWords; w++ )
-                    if ( ((~puData0[w] | ~puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((~puData0[w] ^ c0) | (~puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             else if ( Abc_ObjIsComplement(pObj0) )
             {
                 for ( w = 0; w < p->nWords; w++ )
-                    if ( ((~puData0[w] | puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((~puData0[w] ^ c0) | (puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             else if ( Abc_ObjIsComplement(pObj1) )
             {
                 for ( w = 0; w < p->nWords; w++ )
-                    if ( ((puData0[w] | ~puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((puData0[w] ^ c0) | (~puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             else 
             {
                 for ( w = 0; w < p->nWords; w++ )
-                    if ( ((puData0[w] | puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((puData0[w] ^ c0) | (puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             if ( w == p->nWords )
@@ -1047,35 +1053,37 @@ Dec_Graph_t * manResubDivs1( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UN, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UN, pObj1, k, i + 1 )
         {
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) )
             {
                 for ( w = 0; w < p->nWords; w++ )
     //                if ( (puData0[w] & puData1[w]) != puDataR[w] )
-                    if ( ((~puData0[w] & ~puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((~puData0[w] ^ c0) & (~puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             if ( Abc_ObjIsComplement(pObj0) )
             {
                 for ( w = 0; w < p->nWords; w++ )
     //                if ( (puData0[w] & puData1[w]) != puDataR[w] )
-                    if ( ((~puData0[w] & puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((~puData0[w] ^ c0) & (puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             if ( Abc_ObjIsComplement(pObj1) )
             {
                 for ( w = 0; w < p->nWords; w++ )
     //                if ( (puData0[w] & puData1[w]) != puDataR[w] )
-                    if ( ((puData0[w] & ~puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((puData0[w] ^ c0) & (~puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             else
             {
                 for ( w = 0; w < p->nWords; w++ )
     //                if ( (puData0[w] & puData1[w]) != puDataR[w] )
-                    if ( ((puData0[w] & puData1[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( (((puData0[w] ^ c0) & (puData1[w] ^ c1)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
             }
             if ( w == p->nWords )
@@ -1083,6 +1091,7 @@ Dec_Graph_t * manResubDivs1( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
                 p->nUsedNode1And++;
                 return Abc_ManResubQuit1( p->pRoot, pObj0, pObj1, 0 );
             }
+                
         }
     }
     return NULL;
@@ -1093,72 +1102,77 @@ Dec_Graph_t * manResubDivs12( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Abc_Obj_t * pObj0, * pObj1, * pObj2, * pObjMax, * pObjMin0 = NULL, * pObjMin1 = NULL;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
     unsigned * puData0, * puData1, * puData2, * puDataR;
+    unsigned c0, c1, c2, cR;
     int i, k, j, w, LevelMax;
     puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
     // check positive unate divisors
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UP, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UP, pObj1, k, i + 1 )
         {
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UP, pObj2, j, k + 1 )
             {
                 puData2 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy)));
+                c2 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy) ^ (pObj2->fPhase) )? -1: 0;
                 if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] | ~puData1[w] | ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | (~puData1[w] ^ c1) | (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] | ~puData1[w] | puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | (~puData1[w] ^ c1) | (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] | puData1[w] | ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | (puData1[w] ^ c1) | (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] | puData1[w] | puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | (puData1[w] ^ c1) | (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] | ~puData1[w] | ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | (~puData1[w] ^ c1) | (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] | ~puData1[w] | puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | (~puData1[w] ^ c1) | (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] | puData1[w] | ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | (puData1[w] ^ c1) | (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | puData1[w] | puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] | puData1[w] | puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | (puData1[w] ^ c1) | (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else assert( 0 );
@@ -1193,66 +1207,69 @@ Dec_Graph_t * manResubDivs12( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UN, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UN, pObj1, k, i + 1 )
         {
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs1UN, pObj2, j, k + 1 )
             {
                 puData2 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy)));
+                c2 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy) ^ (pObj2->fPhase) )? -1: 0;
                 if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] & ~puData1[w] & ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & (~puData1[w] ^ c1) & (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] & ~puData1[w] & puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & (~puData1[w] ^ c1) & (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] & puData1[w] & ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & (puData1[w] ^ c1) & (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((~puData0[w] & puData1[w] & puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & (puData1[w] ^ c1) & (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] & ~puData1[w] & ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & (~puData1[w] ^ c1) & (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] & ~puData1[w] & puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & (~puData1[w] ^ c1) & (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] & puData1[w] & ~puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & (puData1[w] ^ c1) & (~puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( !Abc_ObjIsComplement(pObj0) && !Abc_ObjIsComplement(pObj1) && !Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & puData1[w] & puData2[w]) != puDataR[w] )
-                        if ( ((puData0[w] & puData1[w] & puData2[w]) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & (puData1[w] ^ c1) & (puData2[w] ^ c2)) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else assert( 0 );
@@ -1291,46 +1308,51 @@ Dec_Graph_t * manResubDivs2( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Abc_Obj_t * pObj0, * pObj1, * pObj2;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
     unsigned * puData0, * puData1, * puData2, * puDataR;
+    unsigned c0, c1, c2, cR;
     int i, k, w;
     puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
     // check positive unate divisors
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UP, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs2UP0, pObj1, k )
         {
             pObj2 = (Abc_Obj_t *)Vec_PtrEntry( p->vDivs2UP1, k );
 
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             puData2 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy)));
+            c2 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy) ^ (pObj2->fPhase) )? -1: 0;
             if ( Abc_ObjIsComplement(pObj0) )
             {
                 if ( Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] | puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] | (puData1[w] | puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | ((puData1[w] ^ c1) | (puData2[w] ^c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj1) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (~puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] | (~puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | ((~puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] & ~puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] | (puData1[w] & ~puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | ((puData1[w] ^ c1) & (~puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else 
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] | (puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) | ((puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
             }
@@ -1340,28 +1362,28 @@ Dec_Graph_t * manResubDivs2( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] | puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] | (puData1[w] | puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | ((puData1[w] ^ c1) | (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj1) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (~puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] | (~puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | ((~puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] & ~puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] | (puData1[w] & ~puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | ((puData1[w] ^ c1) & (~puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else 
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] | (puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] | (puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) | ((puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
             }
@@ -1376,40 +1398,43 @@ Dec_Graph_t * manResubDivs2( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs1UN, pObj0, i )
     {
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs2UN0, pObj1, k )
         {
             pObj2 = (Abc_Obj_t *)Vec_PtrEntry( p->vDivs2UN1, k );
 
             puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+            c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
             puData2 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy)));
+            c2 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy) ^ (pObj2->fPhase) )? -1: 0;
             if ( Abc_ObjIsComplement(pObj0) )
             {
                 if ( Abc_ObjIsComplement(pObj1) && Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] | puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] & (puData1[w] | puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & ((puData1[w] ^ c1) | (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj1) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (~puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] & (~puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & ((~puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] & ~puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] & (puData1[w] & ~puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & ((puData1[w] ^ c1) & (~puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else 
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((~puData0[w] & (puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((~puData0[w] ^ c0) & ((puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
             }
@@ -1419,28 +1444,28 @@ Dec_Graph_t * manResubDivs2( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] | puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] & (puData1[w] | puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & ((puData1[w] ^ c1) | (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj1) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (~puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] & (~puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & ((~puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else if ( Abc_ObjIsComplement(pObj2) )
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] & ~puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] & (puData1[w] & ~puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & ((puData1[w] ^ c1) & (~puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
                 else 
                 {
                     for ( w = 0; w < p->nWords; w++ )
     //                    if ( (puData0[w] & (puData1[w] & puData2[w])) != puDataR[w] )
-                        if ( ((puData0[w] & (puData1[w] & puData2[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                        if ( (((puData0[w] ^ c0) & ((puData1[w] ^ c1) & (puData2[w] ^ c2))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                             break;
                 }
             }
@@ -1459,21 +1484,27 @@ Dec_Graph_t * manResubDivs3( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
     Abc_Obj_t * pObj0, * pObj1, * pObj2, * pObj3;
     Aig_Obj_t* pRoot = (Aig_Obj_t*)p->pRoot->pCopy;
     unsigned * puData0, * puData1, * puData2, * puData3, * puDataR;
+    unsigned c0, c1, c2, c3, cR;
     int i, k, w = 0, Flag;
     puDataR = Fra_ObjSim(pSim, Aig_ObjId(pRoot));
+    cR = ( Aig_ObjPhase( pRoot ) ^ (p->pRoot->fPhase) )? -1: 0;
     // check positive unate divisors
     Vec_PtrForEachEntry( Abc_Obj_t *, p->vDivs2UP0, pObj0, i )
     {
         pObj1 = (Abc_Obj_t *)Vec_PtrEntry( p->vDivs2UP1, i );
         puData0 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy)));
+        c0 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj0)->pCopy) ^ (pObj0->fPhase) )? -1: 0;
         puData1 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy)));
+        c1 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj1)->pCopy) ^ (pObj1->fPhase) )? -1: 0;
         Flag = (Abc_ObjIsComplement(pObj0) << 3) | (Abc_ObjIsComplement(pObj1) << 2);
 
         Vec_PtrForEachEntryStart( Abc_Obj_t *, p->vDivs2UP0, pObj2, k, i + 1 )
         {
             pObj3 = (Abc_Obj_t *)Vec_PtrEntry( p->vDivs2UP1, k );
             puData2 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy)));
+            c2 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj2)->pCopy) ^ (pObj2->fPhase) )? -1: 0;
             puData3 = Fra_ObjSim(pSim, Aig_ObjId(((Aig_Obj_t*)Abc_ObjRegular(pObj3)->pCopy)));
+            c3 = ( Aig_ObjPhase((Aig_Obj_t*)Abc_ObjRegular(pObj3)->pCopy) ^ (pObj3->fPhase) )? -1: 0;
 
             Flag = (Flag & 12) | ((int)Abc_ObjIsComplement(pObj2) << 1) | (int)Abc_ObjIsComplement(pObj3);
             assert( Flag < 16 );
@@ -1482,100 +1513,100 @@ Dec_Graph_t * manResubDivs3( Abc_ManRes_t * p, Fra_Sml_t * pSim, int Required )
             case 0: // 0000
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & puData1[w]) | (puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & puData1[w]) | (puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 1: // 0001
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & puData1[w]) | (puData2[w] & ~puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & puData1[w]) | (puData2[w] & ~puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (~puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 2: // 0010
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & puData1[w]) | (~puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & puData1[w]) | (~puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((~puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 3: // 0011
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & puData1[w]) | (puData2[w] | puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & puData1[w]) | (puData2[w] | puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) | (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
 
             case 4: // 0100
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & ~puData1[w]) | (puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & ~puData1[w]) | (puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (~puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 5: // 0101
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & ~puData1[w]) | (puData2[w] & ~puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & ~puData1[w]) | (puData2[w] & ~puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (~puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (~puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 6: // 0110
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & ~puData1[w]) | (~puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & ~puData1[w]) | (~puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (~puData1[w] ^ c1)) | ((~puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 7: // 0111
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] & ~puData1[w]) | (puData2[w] | puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] & ~puData1[w]) | (puData2[w] | puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) & (~puData1[w] ^ c1)) | ((puData2[w] ^ c2) | (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
 
             case 8: // 1000
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((~puData0[w] & puData1[w]) | (puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((~puData0[w] & puData1[w]) | (puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((~puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 9: // 1001
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((~puData0[w] & puData1[w]) | (puData2[w] & ~puData3[w])) != puDataR[w] )
-                    if ( (((~puData0[w] & puData1[w]) | (puData2[w] & ~puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((~puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (~puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 10: // 1010
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((~puData0[w] & puData1[w]) | (~puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((~puData0[w] & puData1[w]) | (~puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((~puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((~puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 11: // 1011
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((~puData0[w] & puData1[w]) | (puData2[w] | puData3[w])) != puDataR[w] )
-                    if ( (((~puData0[w] & puData1[w]) | (puData2[w] | puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((~puData0[w] ^ c0) & (puData1[w] ^ c1)) | ((puData2[w] ^ c2) | (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
 
             case 12: // 1100
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] | puData1[w]) | (puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] | puData1[w]) | (puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] ) // care set
+                    if ( ((((puData0[w] ^ c0) | (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] ) // care set
                         break;
                 break;
             case 13: // 1101
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] | puData1[w]) | (puData2[w] & ~puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] | puData1[w]) | (puData2[w] & ~puData3[w])) ^ puDataR[w]) & p->pCareSet[w] )
+                    if ( ((((puData0[w] ^ c0) | (puData1[w] ^ c1)) | ((puData2[w] ^ c2) & (~puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] )
                         break;
                 break;
             case 14: // 1110
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] | puData1[w]) | (~puData2[w] & puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] | puData1[w]) | (~puData2[w] & puData3[w])) ^ puDataR[w]) & p->pCareSet[w] )
+                    if ( ((((puData0[w] ^ c0) | (puData1[w] ^ c1)) | ((~puData2[w] ^ c2) & (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] )
                         break;
                 break;
             case 15: // 1111
                 for ( w = 0; w < p->nWords; w++ )
 //                    if ( ((puData0[w] | puData1[w]) | (puData2[w] | puData3[w])) != puDataR[w] )
-                    if ( (((puData0[w] | puData1[w]) | (puData2[w] | puData3[w])) ^ puDataR[w]) & p->pCareSet[w] )
+                    if ( ((((puData0[w] ^ c0) | (puData1[w] ^ c1)) | ((puData2[w] ^ c2) | (puData3[w] ^ c3))) ^ (puDataR[w] ^ cR)) & p->pCareSet[w] )
                         break;
                 break;
 
@@ -1657,6 +1688,7 @@ clk = Abc_Clock();
     {
         p->nUsedNodeC++;
         p->nLastGain = p->nMffc;
+//         printf("case0\n");
         return pGraph;
     }
 
@@ -1666,6 +1698,7 @@ clk = Abc_Clock();
 p->timeRes1 += Abc_Clock() - clk;
         p->nUsedNode0++;
         p->nLastGain = p->nMffc;
+//         printf("case1\n");
         return pGraph;
     }
     if ( nSteps == 0 || p->nMffc == 1 )
@@ -1682,7 +1715,7 @@ p->timeRes1 += Abc_Clock() - clk;
     {
 p->timeRes1 += Abc_Clock() - clk;
         p->nLastGain = p->nMffc - 1;
-        printf("case 2\n");
+//         printf("case2\n");
         return pGraph;
     }
 p->timeRes1 += Abc_Clock() - clk;
@@ -1695,7 +1728,7 @@ clk = Abc_Clock();
     {
 p->timeRes2 += Abc_Clock() - clk;
         p->nLastGain = p->nMffc - 2;
-        printf("case 3\n");
+//         printf("case3\n");
         return pGraph;
     }
 p->timeRes2 += Abc_Clock() - clk;
@@ -1711,7 +1744,7 @@ clk = Abc_Clock();
     {
 p->timeRes2 += Abc_Clock() - clk;
         p->nLastGain = p->nMffc - 2;
-        printf("case 4\n");
+//         printf("case4\n");
         return pGraph;
     }
 p->timeRes2 += Abc_Clock() - clk;
@@ -1724,7 +1757,7 @@ clk = Abc_Clock();
     {
 p->timeRes3 += Abc_Clock() - clk;
         p->nLastGain = p->nMffc - 3;
-        printf("case 5\n");
+//         printf("case5\n");
         return pGraph;
     }
 p->timeRes3 += Abc_Clock() - clk;
