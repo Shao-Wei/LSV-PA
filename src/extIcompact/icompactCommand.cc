@@ -431,8 +431,8 @@ usage:
 
 static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
-    int result       = 0;
     int c            = 0;
+    int fVerbose     = 0;
 
     FILE * pFile;
     Abc_Ntk_t *pNtk;
@@ -441,10 +441,13 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     pNtk = Abc_FrameReadNtk(pAbc);
     // set defaults
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'v':
+            fVerbose ^= 1;
+            break;
         case 'h':
             goto usage;
         default:
@@ -475,15 +478,15 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtk = ntkSignalMerge2(pNtk, verifyFileName, 0, 1); // merge w/o considering ODC
-    // pNtk = ntkSignalMerge2(pNtk, verifyFileName, 1, 1); // merge considering ODC
+    pNtk = ntkSignalMerge(pNtk, verifyFileName, fVerbose);
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
-    return result;
+    return 0;
     
 usage:
     Abc_Print( -2, "usage: signalmerge [-h] <file>\n" );
     Abc_Print( -2, "\t         merges internal signals to reduce circuit\n" );
+    Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
     Abc_Print( -2, "\t-h     : print the command usage\n");
     Abc_Print( -2, "\t<file> : file with the given patterns\n");
     return 1;
