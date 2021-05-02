@@ -293,4 +293,46 @@ time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     return 0;
 }
+
+// construct compact ntk for command use
+Abc_Ntk_t * IcompactMgr::exp_constructNtkEach(int fSupport, int fIter, int fVerbose)
+{
+    bool **minMaskList;
+    abctime clk, timeCompact = 0, timeConstruct = 0;
+    Abc_Ntk_t *pNtk; // * pCone
+
+    // set to input compaction
+    strncpy(_workingFileName, _samplesplaFileName, 500);
+    _litWorkingPi = _litPi;
+    _litWorkingPo = _litPo;
+    _workingPi = _nPi;
+    _workingPo = _nPo;
+    resetWorkingLitPi();
+    resetWorkingLitPo();
+
+clk = Abc_Clock();
+    minMaskList = icompact_heuristic_each(fIter, 0, fSupport);
+    if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; return NULL; }
+timeCompact += Abc_Clock() - clk;
+
+clk = Abc_Clock();
+    pNtk = constructNtkEach(minMaskList, 0);
+    if(pNtk == NULL) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
+timeConstruct += Abc_Clock() - clk;
+
+    // start log
+    if(fVerbose)
+    {
+        printf( "> Construct Ntk Each Statistics\n");
+        printf( "  #PI / #PO    = %i / %i\n", _nPi, _nPo);
+        printf( "  #Pattern     = %i / %i (unique / total) (%6.2f %%)\n", _uniquePatCount, _oriPatCount, 100*_uniquePatCount/pow(2, _nPi));
+        printf( "  Size = %i\n", Abc_NtkNodeNum(pNtk));
+        ABC_PRT("  Time Compaction   ", timeCompact );
+        ABC_PRT("  Time Construct    ", timeConstruct );
+    }
+        
+    // clean up
+    return pNtk;
+}
+
 ABC_NAMESPACE_IMPL_END

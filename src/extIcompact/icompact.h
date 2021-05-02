@@ -79,6 +79,7 @@ public:
     ~IcompactMgr();
 
     // main functions
+    Abc_Ntk_t * exp_constructNtkEach(int fSupport, int fIter, int fVerbose);
     int performExp(int fExperiment);
     int ocompact(int fOutput, int fNewVar);
     int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch, int fIter, int fSupport);

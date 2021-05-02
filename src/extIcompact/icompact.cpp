@@ -595,28 +595,15 @@ Abc_Ntk_t * IcompactMgr::getNtk_careset(int fMinimize, int fCollapse, int fBatch
 Abc_Ntk_t * IcompactMgr::ntkMinimize(Abc_Ntk_t * pNtk, int fMinimize, int fCollapse)
 {
     // minimization commands
-    char strongCommand[500]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
-    char collapseCommand[500] = "collapse";
-    char minimizeCommand[500] = "strash; dc2; balance -l; resub -K 6 -l; rewrite -l; \
-                                  resub -K 6 -N 2 -l; refactor -l; resub -K 8 -l; balance -l; \
-                                  resub -K 8 -N 2 -l; rewrite -l; resub -K 10 -l; rewrite -z -l; \
-                                  resub -K 10 -N 2 -l; balance -l; resub -K 12 -l; \
-                                  refactor -z -l; resub -K 12 -N 2 -l; rewrite -z -l; balance -l; strash";
+//    char strongCommand[500]   = "if -K 6 -m; mfs2 -W 100 -F 100 -D 100 -L 100 -C 1000000 -e";
+//    char collapseCommand[500] = "collapse";
+//    char compressCommand[500] = "compress2";
+    char resyn2Command[500]   = "resyn2";
     
     Abc_FrameReplaceCurrentNetwork(_pAbc, pNtk);
-    if(fMinimize == STRONG)
-    {
-        if(Cmd_CommandExecute(_pAbc,strongCommand))
-            return NULL;
-    }
-    if(fCollapse)
-    {
-        if(Cmd_CommandExecute(_pAbc,collapseCommand))
-            return NULL;
-    }
     if(fMinimize != NOMIN)
     {
-        if(Cmd_CommandExecute(_pAbc,minimizeCommand))
+        if(Cmd_CommandExecute(_pAbc,resyn2Command))
             return NULL;
     }
     pNtk = Abc_NtkDup(Abc_FrameReadNtk(_pAbc));
@@ -831,13 +818,9 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
     extern bool firstPatternOneBit(char * pFileName, int idx);
     extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
     
-    printf("[Info] Start construct ntk\n");
     Abc_Ntk_t * pNtk, * pNtkTmp;
     Abc_Obj_t * pPi, * pPo;
     abctime clk, clkStart = Abc_Clock(), timeMin = 0, timeTotal = 0;
-    int sizeEach, sizeSTF, sizeMerge, sizeRewrite;
-//     Abc_Ntk_t * pNtkCare;
-//     char * caresetFileName = "tmp.careset.pla";
 
     // Support w/o ocompact for now.
     strncpy(_workingFileName, _samplesplaFileName, 500);
@@ -847,6 +830,7 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
     _workingPo = _nPo;
 
     // init ntk
+clkStart = Abc_Clock();
     pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
     for(int i=0; i<_workingPi; i++)
     {
@@ -892,25 +876,29 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
 
             writeCompactpla(_tmpFileName);
             pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
-            // writeCaresetpla(caresetFileName);
-            // pNtkCare = Io_Read(caresetFileName, Io_ReadFileType(caresetFileName), 1, 0);
-            // if(fMfs)
-            //     pNtkTmp = ntkMfs(pNtkTmp, pNtkCare);
 clk = Abc_Clock();
-            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0);  
+            pNtkTmp = ntkMinimize(pNtkTmp, 1, 0); // use resyn2
 timeMin += Abc_Clock() - clk; 
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
-            // Abc_NtkDelete(pNtkCare); // error: internal flags used
         }
     }
 clk = Abc_Clock();
-    pNtk = ntkMinimize(pNtk, 1, 0);
+    pNtk = ntkMinimize(pNtk, 1, 0); // use resyn2
 timeMin += Abc_Clock() - clk;
     orderPiPo(pNtk);
-sizeEach = Abc_NtkNodeNum(pNtk);
 
-if(ntkVerifySamples(pNtk, _workingFileName, 1) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
+    if(!Abc_NtkCheck(pNtk)) 
+    { 
+        _fMgr = CONSTRUCT_NTK_FAIL; 
+        return NULL; 
+    }
+    if(!ntkVerifySamples(pNtk, _workingFileName, 1)) 
+    { 
+        _fMgr = NTK_FAIL_SIMULATION; 
+        return NULL; 
+    }
+timeTotal = Abc_Clock() - clkStart;
 
 //     if(fFraig)
 //     {
@@ -922,40 +910,11 @@ if(ntkVerifySamples(pNtk, _workingFileName, 1) != 1) { _fMgr = NTK_FAIL_SIMULATI
 //         pNtk = ntkFraig(pNtk, pNtkCare);
 //     }
 
-    // customized don't care minimization
-    pNtk = ntkSTFault(pNtk, _workingFileName, fVerbose);
-clk = Abc_Clock();
-    pNtk = ntkMinimize(pNtk, 1, 0);
-timeMin += Abc_Clock() - clk;
-sizeSTF = Abc_NtkNodeNum(pNtk);
-    
-    pNtk = ntkSignalMerge(pNtk, _workingFileName, fVerbose);
-clk = Abc_Clock();
-    pNtk = ntkMinimize(pNtk, 1, 0);
-timeMin += Abc_Clock() - clk;
-sizeMerge = Abc_NtkNodeNum(pNtk);
-    
-    for(int i=0; i<5; i++)
-    {
-        ntkRewrite(pNtk, 0, 0, ((i==0)&fVerbose), 0, 0, _workingFileName);
-clk = Abc_Clock();
-        pNtk = ntkMinimize(pNtk, 1, 0);
-timeMin += Abc_Clock() - clk;
-    }
-sizeRewrite = Abc_NtkNodeNum(pNtk);
-
-    if(!Abc_NtkCheck(pNtk)) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
-    if(ntkVerifySamples(pNtk, _workingFileName, 0) != 1) { _fMgr = NTK_FAIL_SIMULATION; return NULL; }
-timeTotal = Abc_Clock() - clkStart;
     if(fVerbose)
     {
-        printf("> Construct Ntk Statistics:\n");
-        printf("  size Each    = %i\n", sizeEach);
-        printf("  size STF     = %i\n", sizeSTF);
-        printf("  size Merge   = %i\n", sizeMerge);
-        printf("  size Rewrite = %i\n", sizeRewrite);
-        ABC_PRT("  Standard Min   ", timeMin);
-        ABC_PRT("  Total          ", timeTotal);
+        printf( "> Construct Ntk Statistics:\n");
+        ABC_PRT("  Minimize   ", timeMin);
+        ABC_PRT("  Total      ", timeTotal);
     }
 
     return pNtk;

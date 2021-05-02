@@ -1,5 +1,15 @@
-./../abc -c "r ../samples/c1908.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c1908.128.c00.v01.samples.pla; ps; ntkmin; ps;"
-./../abc -c "r ../samples/c2670.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c2670.128.c00.v01.samples.pla; ps; ntkmin; ps;"
-./../abc -c "r ../samples/c3540.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c3540.128.c00.v01.samples.pla; ps; ntkmin; ps;"
-./../abc -c "r ../samples/c5315.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c5315.128.c00.v01.samples.pla; ps; ntkmin; ps;"
-./../abc -c "r ../samples/c7552.128.c00.v01.samples.pla; st; ps; signalmerge ../samples/c7552.128.c00.v01.samples.pla; ps; ntkmin; ps;"
+#!/bin/bash
+target="c1908.3000.c00.v01"
+benchmarkFile="benchmarks/c1908.blif"
+
+baseFile="samples/$target"
+samplesFile="samples/$target.samples.pla"
+
+#aResyn2="samples/$target.aResyn2.blif"
+aMerge="samples/$target.aMerge.blif"
+aResubN0="samples/$target.aResubN0.blif"
+aResubN3="samples/$target.aResubN3.blif"
+commandLine="ntkconstruct -v -s $benchmarkFile $samplesFile $baseFile; st; ps; signalmerge -v $samplesFile; ps; write_blif $aMerge; ntkresub -v -N 0 $samplesFile; ps; write_blif $aResubN0; ntkresub -v -N 3 $samplesFile; ps; write_blif $aResubN3"
+
+./abc -c "$commandLine"
+
