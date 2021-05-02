@@ -484,7 +484,7 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     return 0;
     
 usage:
-    Abc_Print( -2, "usage: signalmerge [-h] <file>\n" );
+    Abc_Print( -2, "usage: signalmerge [-vh] <file>\n" );
     Abc_Print( -2, "\t         merges internal signals to reduce circuit\n" );
     Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
     Abc_Print( -2, "\t-h     : print the command usage\n");

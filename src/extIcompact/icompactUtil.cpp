@@ -509,6 +509,7 @@ void signalUnMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vecto
     }
 }
 
+extern "C" { int Aig_ManPropagateBuffers( Aig_Man_t * p, int fUpdateLevel ); }
 void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector< pair<Aig_Obj_t*, int> >& vFanout)
 {
     Aig_Obj_t * pFanout, * pNewFanin0, * pNewFanin1, *pTmp;
@@ -571,9 +572,12 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
             }       
         }
         Aig_ObjConnect(pAig, pFanout, pNewFanin0, pNewFanin1); 
+        if(Aig_ObjIsBuf(pFanout))
+            Aig_ManPropagateBuffers( pAig, 0);
     }
 }
 
+extern "C" { void Aig_ManDfsReverse_rec( Aig_Man_t * p, Aig_Obj_t * pObj, Vec_Ptr_t * vNodes ); }
 // merge - class refinement, merge to lowest level
 Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
 {
@@ -584,7 +588,7 @@ Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
     Aig_Obj_t * pTarget, * pObj;
     Vec_Ptr_t * vClassInfo, * vObj = Vec_PtrAlloc(0);
     int sizeOld = Abc_NtkNodeNum(pNtk), sizeNew, i, j;
-    abctime clk, clkStart, timeCand = 0, timeVerify = 0, timeTotal = 0;
+    abctime clk, clkStart, timeCand = 0, timeTotal = 0;
     assert( Abc_NtkIsLogic(pNtk) || Abc_NtkIsStrash(pNtk) );
     if(!ntkVerifySamples(pNtk, simFileName, 0))
     {
@@ -597,6 +601,18 @@ clkStart = Abc_Clock();
     Aig_Man_t * pAig = Abc_NtkToDar(pNtk, 0, 0);
     Aig_ManFanoutStart(pAig);
     
+//     Aig_ManIncrementTravId( pAig );
+//     Aig_ManForEachCo( pAig, pObj, i )
+//         Aig_ObjSetTravIdCurrent( pAig, pObj );
+//     Vec_Ptr_t * vNode = Vec_PtrAlloc(0);
+//     Aig_ManDfsReverse_rec( pAig, Aig_ManObj(pAig, 314883), vNode );
+//     Vec_PtrForEachEntry(Aig_Obj_t*, vNode, pObj, i)
+//         printf(", %i", pObj->Id);
+//     printf("\nPO index\n");
+//     Aig_ManForEachCo(pAig, pObj, i)
+//         printf(", %i = %i", i, pObj->Id);
+//     printf("\n");
+
 clk = Abc_Clock();
     // find candidate merge signals
     vClassInfo = smlSignalMergeCandidate(pAig, simFileName);
@@ -630,16 +646,30 @@ timeCand += Abc_Clock() - clk;
             nTotal++;
             if(Aig_ObjIsNode(pObj) && pObj != pTarget)
             {
-                // printf("Replace %i w/ %i\n", pObj->Id, pTarget->Id);
-                vector< pair<Aig_Obj_t*, int> > vFanout2;
-                signalMerge(pAig, pTarget, pObj, vFanout2);
+//                 printf("Replace %i w/ %i\n", pObj->Id, pTarget->Id);
+//                 vector< pair<Aig_Obj_t*, int> > vFanout2;
+//                 signalMerge(pAig, pTarget, pObj, vFanout2);
+//                 Aig_ManCleanup(pAig);
+//                 nSuccess++;
 // clk = Abc_Clock();
 //                 if(smlVerifyCombGiven(pAig, simFileName, 0))
 //                 { Aig_ManCleanup(pAig); nSuccess++; }       
 //                 else
 //                 { signalUnMerge(pAig, pTarget, pObj, vFanout2); nFail++; }
 // timeVerify += Abc_Clock() - clk;
-                Aig_ManCleanup(pAig);
+
+//                 if(pObj->Id > 314882)
+//                 {
+//                     printf("Replace %i w/ %i\n", pObj->Id, pTarget->Id);
+//                     if(!smlVerifyCombGiven(pAig, simFileName, 1))
+//                     {
+//                         printf("Wrong.\n");
+//                         return NULL;
+//                     }
+//                 }
+                pTarget->nRefs++;
+                Aig_ObjReplace(pAig, pObj, pTarget, 0);
+                pTarget->nRefs--;
                 nSuccess++;
             }
         }
@@ -674,7 +704,6 @@ timeTotal += Abc_Clock() - clkStart;
         printf( "  Total Mergings    = %i (%i EQ classes) / %i.\n", nSuccess, nClass, nTotal);
         printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
         ABC_PRT( "  Candidate   ", timeCand );
-        ABC_PRT( "  Verify      ", timeVerify );
         ABC_PRT( "  Total       ", timeTotal );
     }
     // clean up

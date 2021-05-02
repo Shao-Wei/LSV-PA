@@ -180,8 +180,10 @@ int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOd
             break;
 //         printf("Id = %i\n", Abc_ObjId(pNode));
         // compute uAlter once for the root
+clk = Abc_Clock();
         simFlipOneNode(uAlter, pSim, (Aig_Obj_t *)pNode->pCopy); 
         pManRes->pCareSet = uAlter;
+pManRes->timeSim += Abc_Clock() - clk;
         // compute a reconvergence-driven cut
 clk = Abc_Clock();
         vLeaves = Abc_NodeFindCut( pManCut, pNode, 0 );
@@ -210,10 +212,12 @@ pManRes->timeNtk += Abc_Clock() - clk;
         Dec_GraphFree( pFForm );
 
         // update simulation
+clk = Abc_Clock();
         smlSimulateStop(pSim);
         Aig_ManStop(pAig);
         pAig = Abc_NtkToDar(pNtk, 0, 0);
         pSim = smlSimulateStart(pAig, simFileName);
+pManRes->timeSim += Abc_Clock() - clk;
         /*
         if(!smlVerifyCombGiven(pAig, simFileName, 1))
         {
@@ -379,8 +383,8 @@ void Abc_ManResubPrint( Abc_ManRes_t * p )
                                                      p->nUsedNode2AndOr +
                                                      p->nUsedNode3OrAnd +
                                                      p->nUsedNode3AndOr
-                                                   );                          ABC_PRT( "TOTAL ", p->timeTotal );
-    printf( "Total leaves   = %8d.\n", p->nTotalLeaves );
+                                                   );                          ABC_PRT( "TOTAL ", p->timeTotal );                    
+    printf( "Total leaves   = %8d.\n", p->nTotalLeaves );                      
     printf( "Total divisors = %8d.\n", p->nTotalDivs );
 //    printf( "Total gain     = %8d.\n", p->nTotalGain );
     printf( "Gain           = %8d. (%6.2f %%).\n", p->nNodesBeg-p->nNodesEnd, 100.0*(p->nNodesBeg-p->nNodesEnd)/p->nNodesBeg );
