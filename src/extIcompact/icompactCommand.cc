@@ -429,6 +429,83 @@ usage:
     return 1;
 }
 
+static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    // == Options ================
+    int c            = 0;
+    int fVerbose     = 0;
+    int fSupport     = 0;
+    int fIter        = 8;
+    Abc_Ntk_t * pNtk;
+
+    // == Overall declaration ================
+    char *caresetFileName   = NULL;
+    char *baseFileName      = NULL;
+    char *funcFileName      = NULL;
+    char *resultlogFileName = NULL;
+    
+    IcompactMgr *mgr;
+    // == Parse command ======================
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "sivh" ) ) != EOF )
+    {
+        switch ( c )
+        {            
+            case 's':
+                fSupport ^= 1;
+                funcFileName = argv[globalUtilOptind];
+                globalUtilOptind++;
+                break;
+            case 'i':
+                fIter = atoi(argv[globalUtilOptind]);
+                globalUtilOptind++;
+                break;
+            case 'v':
+                fVerbose ^= 1;
+                break;
+            case 'h':
+                goto usage;
+            default:
+                goto usage;
+        }
+    }
+    if ( argc != globalUtilOptind + 2 )
+    {
+        printf("Missing arguements.. Please specify careset file as well as base name for intermediate files.\n");
+        goto usage;
+    }
+    caresetFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+    baseFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+
+    /////////////////////////////////////////////////////////
+    // Start Main
+    /////////////////////////////////////////////////////////
+    mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
+    pNtk = mgr->exp_constructNtkEach(fSupport, fIter, fVerbose);
+    delete mgr;
+    if(pNtk == NULL)
+    {
+        printf("Construct ntk failed.\n");
+        return 1;
+    }
+
+    Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
+    return 0;
+    
+usage:
+    Abc_Print( -2, "usage: ntkconstruct [options] <careset.pla> <base>\n" );
+    Abc_Print( -2, "\t                         construct ntk from specified careset\n" );
+    Abc_Print( -2, "\t<careset.pla>          : careset specified in pla\n" );
+    Abc_Print( -2, "\t<base>                 : neccessary intermidiate files are dumped here\n" );
+    Abc_Print( -2, "\t-i <num>               : set number of iteration [default = %f]\n", fIter);
+    Abc_Print( -2, "\t-s <ref.blif>         : use support information from the reference ntkwork[default = %s]\n", (fSupport)? "yes": "no");
+    Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
+    Abc_Print( -2, "\t-h                     : print the command usage\n" );
+    return 1;   
+}
+
 static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int c            = 0;
@@ -1179,6 +1256,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkmin", ntkMinimize_Command, 1);    
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "ntkconstruct", ntkConstruct_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "aigrewrite", aigRewrite_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkresub", ntkResub_Command, 1);

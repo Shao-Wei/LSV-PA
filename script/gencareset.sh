@@ -1,11 +1,13 @@
-./../abc -c "gencareset -n 128 ../benchmarks/c1908.blif ../careset/c1908.128.c00.v01.careset.pla ../samples/c1908.128.c00.v01"
-./../abc -c "gencareset -n 128 ../benchmarks/c2670.blif ../careset/c2670.128.c00.v01.careset.pla ../samples/c2670.128.c00.v01"
-./../abc -c "gencareset -n 128 ../benchmarks/c3540.blif ../careset/c3540.128.c00.v01.careset.pla ../samples/c3540.128.c00.v01"
-./../abc -c "gencareset -n 128 ../benchmarks/c5315.blif ../careset/c5315.128.c00.v01.careset.pla ../samples/c5315.128.c00.v01"
-./../abc -c "gencareset -n 128 ../benchmarks/c7552.blif ../careset/c7552.128.c00.v01.careset.pla ../samples/c7552.128.c00.v01"
+#!/bin/bash
 
-./../abc -c "gencareset -n 3000 ../benchmarks/c1908.blif ../careset/c1908.3000.c00.v01.careset.pla ../samples/c1908.3000.c00.v01"
-./../abc -c "gencareset -n 3000 ../benchmarks/c2670.blif ../careset/c2670.3000.c00.v01.careset.pla ../samples/c2670.3000.c00.v01"
-./../abc -c "gencareset -n 3000 ../benchmarks/c3540.blif ../careset/c3540.3000.c00.v01.careset.pla ../samples/c3540.3000.c00.v01"
-./../abc -c "gencareset -n 3000 ../benchmarks/c5315.blif ../careset/c5315.3000.c00.v01.careset.pla ../samples/c5315.3000.c00.v01"
-./../abc -c "gencareset -n 3000 ../benchmarks/c7552.blif ../careset/c7552.3000.c00.v01.careset.pla ../samples/c7552.3000.c00.v01"
+declare -a arrRandom_control=("arbiter" "cavlc" "ctrl" "dec" "i2c" "int2float" "mem_ctrl" "priority" "router" "voter" )
+declare -a arrArithmetic=("adder" "bar" "div" "hyp" "log2" "max" "multiplier" "sin" "sqrt" "square" )
+
+for val in ${arrRandom_control[@]}; do
+   ./abc -c "gencareset -n 3000 ../benchmarks/EPFL-benchmark-suite/random_control/$val.blif careset/$val.3000.c00.v01.careset.pla samples/$val.3000.c00.v01"
+done
+
+for val in ${arrArithmetic[@]}; do
+   ./abc -c "gencareset -n 3000 ../benchmarks/EPFL-benchmark-suite/arithmetic/$val.blif careset/$val.3000.c00.v01.careset.pla samples/$val.3000.c00.v01"
+done
+
