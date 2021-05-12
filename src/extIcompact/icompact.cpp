@@ -15,11 +15,12 @@ ABC_NAMESPACE_IMPL_START
 // Public Functions
 /////////////////////////////////////////////////////////
 
-IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName)
+IcompactMgr::IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *pathName, char *baseFileName, char *funcFileName, char *resultlogFileName)
 {
     // set arguements
     _pAbc = pAbc; // used for executing minimization commands.
     _caresetFileName = caresetFileName;
+    _pathName = pathName;
     _baseFileName = baseFileName;
     _funcFileName = funcFileName;
     _resultlogFileName = resultlogFileName;
@@ -211,7 +212,7 @@ int IcompactMgr::icompact(SolvingType fSolving, double fRatio, int fNewVar, int 
         minMaskList = icompact_heuristic_each(fIter, fRatio, fSupport);
         if(minMaskList == NULL) { _fMgr = ICOMPACT_FAIL; }
         _end_time = Abc_Clock();
-        _pNtk_core = constructNtkEach(minMaskList, 1);
+        _pNtk_core = constructNtkEach(minMaskList, 0, 1);
         if(_pNtk_core == NULL) { return 0; } 
     }
     else if(fSolving == LEXSAT_CLASSIC)
@@ -396,6 +397,25 @@ bool IcompactMgr::validWorkingLitPo()
 
 void IcompactMgr::getInfoFromSamples()
 {
+    // get additional nPat info from pla
+    char buff[102400];
+    char * t;
+    char * unused __attribute__((unused)); // get rid of fget warnings
+    FILE * fPla = fopen(_samplesplaFileName, "r");
+    if(fPla == NULL)
+    {
+        printf("Cannot open file %s.\n", _samplesplaFileName);
+        _fMgr = BADSAMPLES;
+        return;
+    }
+
+    for(int i=0; i<6; i++)
+        unused = fgets(buff, 102400, fPla);
+    t = strtok(buff, " \n");
+    t = strtok(NULL, " \n");
+    _nPat = atoi(t);
+    
+    // check valid pla file
     Abc_Ntk_t *pNtk = Io_Read(_samplesplaFileName, Io_ReadFileType(_samplesplaFileName), 1, 0);
     if(pNtk == NULL)
     {
@@ -703,11 +723,7 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     one_line[lenPi] = ' ';
     one_line[lenPi + lenPo + 1] = '\0';
 
-    unused = fgets(buff, 102400, fpattern); // .i
-    unused = fgets(buff, 102400, fpattern); // .o
-    unused = fgets(buff, 102400, fpattern); // .ilb
-    unused = fgets(buff, 102400, fpattern); // .ob
-    unused = fgets(buff, 102400, fpattern); // .type
+    // header, .i, .o, .ilb, .ob, .type, .p
     fprintf(fcompactpla, ".i %i\n", lenPi);
     fprintf(fcompactpla, ".o %i\n", lenPo);
     fprintf(fcompactpla, ".ilb");
@@ -724,6 +740,10 @@ void IcompactMgr::writeCompactpla(char* outputplaFileName)
     fprintf(fcompactpla, "\n.ob");
     for(int i=0; i<nPo; i++) { if(litPo[i]) { fprintf(fcompactpla, " %s", _poNames[i]); } }
     fprintf(fcompactpla, "\n.type fr\n");
+    fprintf(fcompactpla, ".p %i\n", _nPat);
+
+    for(int i=0; i<6; i++)
+        unused = fgets(buff, 102400, fpattern);
     while(fgets(buff, 102400, fpattern))
     {
         int local_count = 0;
@@ -812,7 +832,7 @@ void IcompactMgr::writeCaresetpla(char* outputplaFileName)
     delete [] one_line;
 }
 
-Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
+Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fskDT, int fVerbose)
 {
     // icompactUtil.cpp
     extern bool firstPatternOneBit(char * pFileName, int idx);
@@ -822,13 +842,13 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fVerbose)
     Abc_Obj_t * pPi, * pPo;
     abctime clk, clkStart = Abc_Clock(), timeMin = 0, timeTotal = 0;
 
-    // Support w/o ocompact for now.
     strncpy(_workingFileName, _samplesplaFileName, 500);
     _litWorkingPi = _litPi;
     _litWorkingPo = _litPo;
     _workingPi = _nPi;
     _workingPo = _nPo;
 
+    printf("[Info] Start construct ntk each .. \n");
     // init ntk
 clkStart = Abc_Clock();
     pNtk = Abc_NtkAlloc(ABC_NTK_STRASH, ABC_FUNC_AIG, 1);
@@ -869,13 +889,31 @@ clkStart = Abc_Clock();
         }
         else
         {
+            // set _lit
             for(int i=0; i<_workingPi; i++) { _litWorkingPi[i] = 0; }
             for(int i=0, n=fanInList.size(); i<n; i++) { _litWorkingPi[fanInList[i]] = 1; }
             for(int i=0; i<_workingPo; i++) { _litWorkingPo[i] = 0; }
             _litWorkingPo[poIdx] = 1;
 
-            writeCompactpla(_tmpFileName);
-            pNtkTmp = Io_Read(_tmpFileName, Io_ReadFileType(_tmpFileName), 1, 0);
+            // set names for each subcircuit
+            char new_pla[strlen(_pathName) + 12 + 4 + 1];
+            char new_blif[strlen(_pathName) + 12 + 5 + 1];
+            sprintf(new_pla, "%s/%d.pla", _pathName, poIdx);
+            sprintf(new_blif, "%s/%d.blif", _pathName, poIdx);
+
+            writeCompactpla(new_pla);
+            if(fskDT)
+            {
+                char sysCommand[17 + strlen(_pathName) + 12 + 1];
+                sprintf(sysCommand, "python3 skDT.py %s %d", _pathName, poIdx);
+                system(sysCommand);
+                pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+            }
+            else
+            {
+                pNtkTmp = Io_Read(new_pla, Io_ReadFileType(new_pla), 1, 0);
+            }
+            
 clk = Abc_Clock();
             pNtkTmp = ntkMinimize(pNtkTmp, 1, 0); // use resyn2
 timeMin += Abc_Clock() - clk; 

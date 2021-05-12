@@ -35,7 +35,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk1 = constructNtkEach(minMaskList1, 1);
+    pNtk1 = constructNtkEach(minMaskList1, 0, 1);
     if(pNtk1 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c1 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -52,7 +52,7 @@ int IcompactMgr::exp_support_icompact_heuristic()
     time_h2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 
     _step_time = Abc_Clock();
-    pNtk2 = constructNtkEach(minMaskList2, 1);
+    pNtk2 = constructNtkEach(minMaskList2, 0, 1);
     if(pNtk2 == NULL) { return 0; }
     _end_time = Abc_Clock();
     time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
@@ -158,7 +158,7 @@ clk = Abc_Clock();
 timeCompact += Abc_Clock() - clk;
 
 clk = Abc_Clock();
-    pNtk = constructNtkEach(minMaskList, 1);
+    pNtk = constructNtkEach(minMaskList, 0, 1);
     if(pNtk == NULL) { _fMgr = CONSTRUCT_NTK_FAIL; return 0; }
 timeConstruct += Abc_Clock() - clk;
 
@@ -295,7 +295,7 @@ time_c2 = 1.0*((double)(_end_time - _step_time))/((double)CLOCKS_PER_SEC);
 }
 
 // construct compact ntk for command use
-Abc_Ntk_t * IcompactMgr::exp_constructNtkEach(int fSupport, int fIter, int fVerbose)
+Abc_Ntk_t * IcompactMgr::exp_constructNtkEach(int fSupport, int fIter, int fskDT, int fVerbose)
 {
     bool **minMaskList;
     abctime clk, timeCompact = 0, timeConstruct = 0;
@@ -316,7 +316,7 @@ clk = Abc_Clock();
 timeCompact += Abc_Clock() - clk;
 
 clk = Abc_Clock();
-    pNtk = constructNtkEach(minMaskList, 0);
+    pNtk = constructNtkEach(minMaskList, fskDT, 0);
     if(pNtk == NULL) { _fMgr = CONSTRUCT_NTK_FAIL; return NULL; }
 timeConstruct += Abc_Clock() - clk;
 

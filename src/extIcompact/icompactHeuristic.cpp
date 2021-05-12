@@ -54,6 +54,7 @@ ICompactHeuristicMgr::ICompactHeuristicMgr(char *fileName, int fRemove)
     unused = fgets(buff, 10000, fRead); // .ilb
     unused = fgets(buff, 10000, fRead); // .ob
     unused = fgets(buff, 10000, fRead); // .type fr
+    unused = fgets(buff, 10000, fRead); // .p
     while(fgets(buff, 10000, fRead))
     {
         t1 = strtok(buff, " \n");

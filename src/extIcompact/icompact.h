@@ -75,11 +75,11 @@ enum ERRORTYPE {
 class IcompactMgr
 {
 public:
-    IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char *baseFileName, char *funcFileName, char *resultlogFileName);
+    IcompactMgr(Abc_Frame_t * pAbc, char *caresetFileName, char* pathName, char *baseFileName, char *funcFileName, char *resultlogFileName);
     ~IcompactMgr();
 
     // main functions
-    Abc_Ntk_t * exp_constructNtkEach(int fSupport, int fIter, int fVerbose);
+    Abc_Ntk_t * exp_constructNtkEach(int fSupport, int fIter, int fskDT, int fVerbose);
     int performExp(int fExperiment);
     int ocompact(int fOutput, int fNewVar);
     int icompact(SolvingType fSolving, double fRatio, int fNewVar, int fCollapse, int fMinimize, int fBatch, int fIter, int fSupport);
@@ -104,6 +104,7 @@ private:
     bool _fEval; // flag set true if _pNtk_func is built for eval
     bool _fSupportFunc, _fSupportPatt; // flag set true after support set is built
     
+    // input compaction mgr
     ICompactHeuristicMgr * _patternMgr;
 
     // working
@@ -112,7 +113,7 @@ private:
     int _workingPi, _workingPo; 
 
     // basic info
-    int _nPi, _nPo;
+    int _nPat, _nPi, _nPo;
     char **_piNames, **_poNames; // get from samples file
     bool *_litPi, *_litPo;
     int _nRPi, _nRPo; // Output Compaction & Input Reencoding results
@@ -126,37 +127,34 @@ private:
     // support set
     int ** _supportInfo_func; // [i][j] if po i has support pi j
     int ** _supportInfo_patt; // [i][j] if po i has support pi j
-    void supportInfo_Func();
-    void supportInfo_Patt();
 
     // arguements
     Abc_Frame_t * _pAbc;
-    char *_funcFileName;
     char *_caresetFileName;
-    char *_baseFileName; // base file name for multiple intermediate files
+    char *_pathName;
+    char *_baseFileName; // template file name for multiple intermediate files
+    char *_funcFileName;
     char *_resultlogFileName;
     char _tmpFileName[500];
 
     // intermediate files
-    char _samplesplaFileName[500]; // samples of simulation
-    char _reducedplaFileName[500]; // redundent inputs removed
+    char _samplesplaFileName[500];     // samples of simulation
+    char _reducedplaFileName[500];     // redundent inputs removed
     char _outputreencodedFileName[500];
-    char _outputmappingFileName[500]; // omap
+    char _outputmappingFileName[500];  // omap
     char _inputreencodedFileName[500];
-    char _inputmappingFileName[500]; // imap
+    char _inputmappingFileName[500];   // imap
+    char _forqesFileName[500];         // external tool use
+    char _forqesCareFileName[500];     // external tool use
+    char _MUSFileName[500];            // external tool use
 
     // intermediate pNtks
-    Abc_Ntk_t* _pNtk_func; // only used for evaluation
+    Abc_Ntk_t* _pNtk_func; // used to extract support info
     Abc_Ntk_t* _pNtk_careset;
     Abc_Ntk_t* _pNtk_samples;
     Abc_Ntk_t* _pNtk_imap;
     Abc_Ntk_t* _pNtk_core;
     Abc_Ntk_t* _pNtk_omap;
-
-    // external tool use
-    char _forqesFileName[500];
-    char _forqesCareFileName[500];
-    char _MUSFileName[500];
     
     // sizing & timing  
     double _time_icompact, _time_ireencode, _time_oreencode; // runtime for each operation 
@@ -171,6 +169,8 @@ private:
     bool validWorkingLitPo();
     void getInfoFromSamples();
     void orderPiPo(Abc_Ntk_t * pNtk);
+    void supportInfo_Func();
+    void supportInfo_Patt();
 
     // ntk functions
     Abc_Ntk_t * getNtk_func();
@@ -182,7 +182,7 @@ private:
 //    Abc_Ntk_t * ntkBatch(int fMode, int fBatch); 
     void writeCompactpla(char* outputplaFileName);
     void writeCaresetpla(char* outputplaFileName);
-    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fVerbose);
+    Abc_Ntk_t * constructNtkEach(bool **minMaskList, int fskDT, int fVerbose);
     Abc_Ntk_t * constructNtkOmap(int * recordPo, int fMfs, int fFraig, int fSTF, int fMerge);
 
     // icompact methods - forqes / Muser2 file dump is supported in icompact_cube_direct_encode_with_c()

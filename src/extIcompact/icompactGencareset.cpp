@@ -175,7 +175,7 @@ Fra_Sml_t * smlSimulateStart( Aig_Man_t * pAig, char * pFileName)
     int nPatterns;
     int patLen;
 
-    vSimInfo = smlSimulateReadFile( pFileName, 5 );
+    vSimInfo = smlSimulateReadFile( pFileName, 6 );
     if ( vSimInfo == NULL )
         return NULL;
 
@@ -360,7 +360,7 @@ int smlVerifyCombGiven( Aig_Man_t * pAig, char * pFileName, int fVerbose)
     vector<int> pWrong, pWrongTemp, pCount;
 
     // read comb patterns from file
-    vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
+    vSimInfo = smlSimulateReadFile( pFileName, 6 ); // skip header
     if ( vSimInfo == NULL )
         return 1;
 
@@ -435,7 +435,7 @@ int smlSTFaultCandidate( Aig_Man_t * pAig, char * pFileName, vector< pair<int, i
     int i, k, count;
 
     // read comb patterns from file
-    vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
+    vSimInfo = smlSimulateReadFile( pFileName, 6 ); // skip header
     if ( vSimInfo == NULL )
         return 1;
 
@@ -489,7 +489,7 @@ int smlSTFaultCandidate2( Aig_Man_t * pAig, char * pFileName, vector< pair<int, 
     int i, k, count;
 
     // read comb patterns from file
-    vSimInfo = smlSimulateReadFile( pFileName, 5 ); // skip header
+    vSimInfo = smlSimulateReadFile( pFileName, 6 ); // skip header
     if ( vSimInfo == NULL )
         return 1;
 
@@ -548,7 +548,7 @@ Vec_Ptr_t* smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName)
         pPrev = i;
     }
 
-    vSimInfo = smlSimulateReadFile( pFileName, 5 );
+    vSimInfo = smlSimulateReadFile( pFileName, 6 );
     if ( vSimInfo == NULL )
         return 0;
 

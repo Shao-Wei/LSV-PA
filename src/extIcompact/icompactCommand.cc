@@ -212,7 +212,7 @@ static int compact_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     /////////////////////////////////////////////////////////
     // Start Main
     /////////////////////////////////////////////////////////
-    mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
+    mgr = new IcompactMgr(pAbc, caresetFileName, NULL, baseFileName, funcFileName, resultlogFileName);
     if(fExperiment > 0)
         mgr->performExp(fExperiment);
     else
@@ -436,10 +436,12 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     int fVerbose     = 0;
     int fSupport     = 0;
     int fIter        = 8;
+    int fskDT        = 0;
     Abc_Ntk_t * pNtk;
 
     // == Overall declaration ================
     char *caresetFileName   = NULL;
+    char *pathName          = NULL;
     char *baseFileName      = NULL;
     char *funcFileName      = NULL;
     char *resultlogFileName = NULL;
@@ -447,7 +449,7 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     IcompactMgr *mgr;
     // == Parse command ======================
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "sivh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "sidvh" ) ) != EOF )
     {
         switch ( c )
         {            
@@ -460,6 +462,9 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 fIter = atoi(argv[globalUtilOptind]);
                 globalUtilOptind++;
                 break;
+            case 'd':
+                fskDT ^= 1;
+                break;
             case 'v':
                 fVerbose ^= 1;
                 break;
@@ -469,12 +474,14 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 goto usage;
         }
     }
-    if ( argc != globalUtilOptind + 2 )
+    if ( argc != globalUtilOptind + 3 )
     {
         printf("Missing arguements.. Please specify careset file as well as base name for intermediate files.\n");
         goto usage;
     }
     caresetFileName = argv[globalUtilOptind];
+    globalUtilOptind++;
+    pathName = argv[globalUtilOptind];
     globalUtilOptind++;
     baseFileName = argv[globalUtilOptind];
     globalUtilOptind++;
@@ -482,8 +489,8 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     /////////////////////////////////////////////////////////
     // Start Main
     /////////////////////////////////////////////////////////
-    mgr = new IcompactMgr(pAbc, caresetFileName, baseFileName, funcFileName, resultlogFileName);
-    pNtk = mgr->exp_constructNtkEach(fSupport, fIter, fVerbose);
+    mgr = new IcompactMgr(pAbc, caresetFileName, pathName, baseFileName, funcFileName, resultlogFileName);
+    pNtk = mgr->exp_constructNtkEach(fSupport, fIter, fskDT, fVerbose);
     delete mgr;
     if(pNtk == NULL)
     {
@@ -495,12 +502,14 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     return 0;
     
 usage:
-    Abc_Print( -2, "usage: ntkconstruct [options] <careset.pla> <base>\n" );
+    Abc_Print( -2, "usage: ntkconstruct [options] <careset.pla> <target dir> <base>\n" );
     Abc_Print( -2, "\t                         construct ntk from specified careset\n" );
     Abc_Print( -2, "\t<careset.pla>          : careset specified in pla\n" );
-    Abc_Print( -2, "\t<base>                 : neccessary intermidiate files are dumped here\n" );
+    Abc_Print( -2, "\t<target dir>           : neccessary intermidiate files are dumped here\n" );
+    Abc_Print( -2, "\t<base>                 : template name for intermidiate files\n" );
     Abc_Print( -2, "\t-i <num>               : set number of iteration [default = %f]\n", fIter);
-    Abc_Print( -2, "\t-s <ref.blif>         : use support information from the reference ntkwork[default = %s]\n", (fSupport)? "yes": "no");
+    Abc_Print( -2, "\t-s <ref.blif>          : use support information from the reference ntkwork[default = %s]\n", (fSupport)? "yes": "no");
+    Abc_Print( -2, "\t-d                     : toggle using skDT to construct circuit [default = %d]\n", fskDT );
     Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
     Abc_Print( -2, "\t-h                     : print the command usage\n" );
     return 1;   
@@ -699,7 +708,7 @@ static int ntkResub_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv)
         Abc_Print( -1, "Resubstitute has failed.\n" );
         return 1;
     }
-    if(!ntkVerifySamples(Abc_FrameReadNtk(pAbc), verifyFileName, 1))
+    if(!ntkVerifySamples(Abc_FrameReadNtk(pAbc), verifyFileName, 0))
     {
         Abc_Print( -1, "Verifying has failed.\n" );
         return 1;

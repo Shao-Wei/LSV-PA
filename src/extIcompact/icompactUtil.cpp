@@ -111,7 +111,7 @@ bool firstPatternOneBit(char * pFileName, int idx)
     char buff[102400];
     char * unused __attribute__((unused)); // get rid of fget warnings
     FILE* fpattern = fopen(pFileName, "r");
-    for(int i=0; i<6; i++) // get first pattern
+    for(int i=0; i<7; i++) // get first pattern
         unused = fgets(buff, 102400, fpattern);
     
     bit = buff[idx];
@@ -127,7 +127,7 @@ bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx)
     char buff[102400];
     char * unused __attribute__((unused)); // get rid of fget warnings
     FILE* fpattern = fopen(pFileName, "r");
-    for(int i=0; i<6; i++) // get first pattern
+    for(int i=0; i<7; i++) // get first pattern
         unused = fgets(buff, 102400, fpattern);
     
     iBit = buff[piIdx];
@@ -688,7 +688,7 @@ timeCand += Abc_Clock() - clk;
         Aig_ManStop(pAig);
         return pNtk;
     }
-    if (!ntkVerifySamples(pNtkNew, simFileName, 1) )
+    if (!ntkVerifySamples(pNtkNew, simFileName, 0) )
     {
         printf( "The simulation check has failed.\n" );
         Abc_NtkDelete( pNtkNew );
@@ -1246,7 +1246,6 @@ Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
         ABC_PRT( "      Mffc      ", pManRwr->timeMffc );
         ABC_PRT( "      Eval      ", pManRwr->timeEval );
         ABC_PRT( "  Update        ", pManRwr->timeUpdate );
-        ABC_PRT( "      Update DC ", pManRwr->timeUpdate );
         ABC_PRT( "  Total         ", pManRwr->timeTotal );
     }
         
