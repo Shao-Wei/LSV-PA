@@ -11,6 +11,8 @@ from sklearn.model_selection import GridSearchCV
 import matplotlib
 import pickle
 from sk2Blif import sk2Blif
+from DGDO import DGDO
+from DGDOFringe import DGDOFringe
 
 def getData(poNum,target):
     file=open("{}/{}.pla".format(target,poNum), 'r')
@@ -45,43 +47,44 @@ def getData(poNum,target):
     file.close()
     return np.array(resultData),np.array(resultLabel),nVar,nSample, piNameList, poName
 
-#train sklearn DT
-parameters={
-    'random_state':[0,2,4],
-    'min_samples_split':[2],
-    'min_samples_leaf':[1],
-    'max_features':[None,"sqrt"],
-#    'min_impurity_decrease':[0,0.02,0.05,0.1],
-#    'ccp_alpha':[0,0.00035,0.0006,0.0008]
-    }
-
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print('Missing argument. Usage: ./skDT.py <target> <poNum>')
+        print('Missing argument. Usage: ./skDT.py <target> <poNum> <type>')
         sys.exit()
-    target = sys.argv[1] # samples/c1908.3000/
+    target = sys.argv[1] # samples/c1908.3000
     poNum = int(sys.argv[2]) # 0
+    constructType = sys.argv[3] # "dt", "dgdo", "fringe"
 
     logFile=open("{}/skDT.csv".format(target),'w')
+    logFile.write("type: " + str(constructType) + "\n")
     logFile.write("poNum,train_acc\n")
     logFile.write(str(poNum)+',')
     trainAccRec=[]
     trainData,trainLabel,nVar,nSampleTrain, piNameList, poName=getData(poNum,target)
 
-    dt=tree.DecisionTreeClassifier(random_state=1)
-    dt=GridSearchCV(dt,parameters)
-    #print("training skDT with parameter search for target:{} poNum:{}".format(target,poNum))
-    dt.fit(trainData,trainLabel)
-    #print("finish training")
-    #print("depth of tree:",dt.get_depth())
-    pred=dt.best_estimator_.predict(trainData)
-    #print('dt train acc:',np.sum(np.array(pred)==np.array(trainLabel))/nSampleTrain*100,'%')
-    logFile.write("{}\n".format(np.sum(np.array(pred)==np.array(trainLabel))/nSampleTrain))
-
-    #convert to circuit
-    #print("converting and saving blif file")
-    sk2Blif(nVar, piNameList, poName, dt.best_estimator_, '{}/{}'.format(target,poNum))
-    #print("finish converting and saving blif file")
+    if constructType == "dt":
+        dg=tree.DecisionTreeClassifier(random_state=1, min_samples_split=2, min_samples_leaf=1)
+        dg.fit(trainData,trainLabel)
+        count=sum(dg.predict(trainData)==trainLabel)
+        trainAcc=count/nSampleTrain
+        print('train acc:',trainAcc)
+        sk2Blif(nVar, piNameList, poName, dg, '{}/{}'.format(target,poNum))
+    elif constructType == "dgdo":
+        dg=DGDO(nVar,mergeCriteria="merge",mergeSampleMethod="pred",threshold=1.0)
+        dg.fit(trainData,trainLabel)
+        count=sum(dg.predict(trainData)==trainLabel)
+        trainAcc=count/nSampleTrain
+        print('train acc:',trainAcc)
+        sk2Blif(nVar, piNameList, poName, dg, '{}/{}'.format(target,poNum))
+    elif constructType == "fringe":
+        dg=DGDOFringe(mergeCriteria="merge",mergeSampleMethod="pred",threshold=1.0,max_nFeats=500)
+        dg.train(trainData,trainLabel,trainData,trainLabel)
+        count=sum(dg.predict(trainData)==trainLabel)
+        trainAcc=count/nSampleTrain
+        print('train acc:',trainAcc)
+        dg.toBlif('{}/{}'.format(target,poNum))
+    else:
+        print("Warning! Cannot parse the construction type. Options: dt, dgdo, fringe")
 
     logFile.close()
 

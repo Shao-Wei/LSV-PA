@@ -19,6 +19,10 @@ src/aig/ddb/
 
 samples/
 careset/
+logs/
+script/
+results/
+benchexec/
 check.pattern
 .vscode/
 
