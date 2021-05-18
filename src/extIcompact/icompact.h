@@ -223,9 +223,9 @@ char ** setDummyNames(int len, char * baseStr);
 int ntkVerifySamples(Abc_Ntk_t* pNtk, char *pFile, int fVerbose);
 int ntkAppend( Abc_Ntk_t * pNtk1, Abc_Ntk_t * pNtk2);
 Abc_Ntk_t * ntkSTFault(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose); // modifies src/aig/aig/aigTable.c Aig_TableLookUp() to avoid assertion fail
-Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose);
-int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName );
-int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOdc, int fUpdateLevel, int fVerbose, int fVeryVerbose, char * simFileName );
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose, char * logFileName);
+int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName, char * logFileName );
+int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOdc, int fUpdateLevel, int fVerbose, int fVeryVerbose, char * simFileName, char * logFileName );
 
 ABC_NAMESPACE_HEADER_END
 #endif

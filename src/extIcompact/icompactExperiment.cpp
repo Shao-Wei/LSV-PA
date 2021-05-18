@@ -330,6 +330,13 @@ timeConstruct += Abc_Clock() - clk;
         ABC_PRT("  Time Compaction   ", timeCompact );
         ABC_PRT("  Time Construct    ", timeConstruct );
     }
+    if(_resultlogFileName != NULL)
+    {
+        FILE * fLog = fopen(_resultlogFileName, "a");
+        fprintf(fLog, "\n%s, %i, %i, %i, %i, %i", _pathName, _oriPatCount, _nPi, _nPo, fskDT, fSupport);
+        fprintf(fLog, ", %i, %i, %9.2f, %9.2f", Abc_NtkNodeNum(pNtk), Abc_NtkLevel(pNtk), 1.0*((double)(timeCompact))/((double)CLOCKS_PER_SEC), 1.0*((double)(timeConstruct))/((double)CLOCKS_PER_SEC) );
+        fclose(fLog);
+    }
         
     // clean up
     return pNtk;

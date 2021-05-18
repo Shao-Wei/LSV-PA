@@ -221,6 +221,13 @@ bool * ICompactHeuristicMgr::compact_drop(int iterNum, int fAllPo)
     }
 
     // solve
+    if(iterNum == 0) // no compaction is requested
+    {
+        for(size_t i=0; i<_nPi; i++)
+            _minMask[i] = initMask[i];
+        return _minMask;
+    }
+
     for(int iter=0; iter<iterNum; iter++)
     {
         // printf("Solve heuristic (drop) - iter %i\n", iter);

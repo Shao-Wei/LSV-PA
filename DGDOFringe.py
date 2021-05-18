@@ -28,7 +28,7 @@ class DGDOFringe():
         if iter>0:
             self.threshold+=0.005
             if self.threshold>1: self.threshold=1
-            print("update threshold to:",self.threshold)
+            # print("update threshold to:",self.threshold)
         self.dtree = DGDO(data.shape[1],mergeCriteria=self.mergeCriteria,mergeSampleMethod=self.mergeSampleMethod,threshold=self.threshold)
         self.dtree.fit(data, labels)
     
@@ -42,8 +42,8 @@ class DGDOFringe():
             self.__trainInt__(trainData, trainLabels,iter)
             _, trainAcc = self.predict(trainData, trainLabels, False, False)
             _, valAcc = self.predict(validData, validLabels, False, False)
-            if self.verbose:
-                print('iter {}: {} / {}'.format(str(iter), str(trainAcc), str(valAcc)))
+            # if self.verbose:
+            #     print('iter {}: {} / {}'.format(str(iter), str(trainAcc), str(valAcc)))
             if valAcc > valAccBest:
                 self.dtreeBest = self.dtree
                 self.fringeFeatsBest = self.fringeFeats.copy()
@@ -59,7 +59,7 @@ class DGDOFringe():
                 trainData = self.__dataAug__(trainData, id1, id2, op)
                 validData = self.__dataAug__(validData, id1, id2, op)
                 self.fringeFeats[feat] = self.nFeats + len(self.fringeFeats)            
-            print("len(self.fringeFeats):",len(self.fringeFeats))
+            # print("len(self.fringeFeats):",len(self.fringeFeats))
             if len(self.fringeFeats) == initSize: break
             iter += 1
         return trainAccBest, valAccBest

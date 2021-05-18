@@ -65,23 +65,23 @@ if __name__ == '__main__':
     if constructType == "dt":
         dg=tree.DecisionTreeClassifier(random_state=1, min_samples_split=2, min_samples_leaf=1)
         dg.fit(trainData,trainLabel)
-        count=sum(dg.predict(trainData)==trainLabel)
-        trainAcc=count/nSampleTrain
-        print('train acc:',trainAcc)
+        #count=sum(dg.predict(trainData)==trainLabel)
+        #trainAcc=count/nSampleTrain
+        #print('train acc:',trainAcc)
         sk2Blif(nVar, piNameList, poName, dg, '{}/{}'.format(target,poNum))
     elif constructType == "dgdo":
         dg=DGDO(nVar,mergeCriteria="merge",mergeSampleMethod="pred",threshold=1.0)
         dg.fit(trainData,trainLabel)
-        count=sum(dg.predict(trainData)==trainLabel)
-        trainAcc=count/nSampleTrain
-        print('train acc:',trainAcc)
+        #count=sum(dg.predict(trainData)==trainLabel)
+        #trainAcc=count/nSampleTrain
+        #print('train acc:',trainAcc)
         sk2Blif(nVar, piNameList, poName, dg, '{}/{}'.format(target,poNum))
     elif constructType == "fringe":
-        dg=DGDOFringe(mergeCriteria="merge",mergeSampleMethod="pred",threshold=1.0,max_nFeats=500)
+        dg=DGDOFringe(mergeCriteria="merge",mergeSampleMethod="pred",threshold=1.0,max_nFeats=100)
         dg.train(trainData,trainLabel,trainData,trainLabel)
-        count=sum(dg.predict(trainData)==trainLabel)
-        trainAcc=count/nSampleTrain
-        print('train acc:',trainAcc)
+        #count=sum(dg.predict(trainData)==trainLabel)
+        #trainAcc=count/nSampleTrain
+        #print('train acc:',trainAcc)
         dg.toBlif('{}/{}'.format(target,poNum))
     else:
         print("Warning! Cannot parse the construction type. Options: dt, dgdo, fringe")

@@ -579,7 +579,7 @@ void signalMerge(Aig_Man_t * pAig, Aig_Obj_t * pObj1, Aig_Obj_t * pObj2, vector<
 
 extern "C" { void Aig_ManDfsReverse_rec( Aig_Man_t * p, Aig_Obj_t * pObj, Vec_Ptr_t * vNodes ); }
 // merge - class refinement, merge to lowest level
-Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose)
+Abc_Ntk_t * ntkSignalMerge(Abc_Ntk_t * pNtk, char * simFileName, int fVerbose, char * logFileName)
 {
     extern Vec_Ptr_t* smlSignalMergeCandidate( Aig_Man_t * pAig, char * pFileName);
 
@@ -705,6 +705,12 @@ timeTotal += Abc_Clock() - clkStart;
         printf( "  Gain              = %8d. (%6.2f %%).\n", sizeOld - sizeNew, 100.0*(sizeOld - sizeNew)/sizeOld );
         ABC_PRT( "  Candidate   ", timeCand );
         ABC_PRT( "  Total       ", timeTotal );
+    }
+    if(logFileName != NULL)
+    {
+        FILE * fLog = fopen(logFileName, "a");
+        fprintf(fLog, ", signalmerge, %i, %i, %6.2f , %9.2f, %9.2f, %i", Abc_NtkNodeNum(pNtkNew), Abc_NtkLevel(pNtkNew), 100.0*(sizeOld - sizeNew)/sizeOld, 1.0*((double)(timeCand))/((double)CLOCKS_PER_SEC), 1.0*((double)(timeTotal))/((double)CLOCKS_PER_SEC), nSuccess);
+        fclose(fLog);
     }
     // clean up
     Vec_PtrFree(vClassInfo);
@@ -1113,7 +1119,7 @@ Cut_Man_t * Abc_NtkStartCutManForRewrite( Abc_Ntk_t * pNtk )
     return pManCut;
 }
 
-int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName )
+int ntkRewrite( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, char * simFileName, char * logFileName )
 {
     ProgressBar * pProgress;
     Cut_Man_t * pManCut;
@@ -1249,6 +1255,14 @@ Rwr_ManAddTimeTotal( pManRwr, Abc_Clock() - clkStart );
         ABC_PRT( "  Total         ", pManRwr->timeTotal );
     }
         
+    if( logFileName != NULL)
+    {
+        FILE * fLog = fopen(logFileName, "a");
+        fprintf(fLog, ", rewrite, %i, %i, %6.2f", Abc_NtkNodeNum(pNtk), Abc_NtkLevel(pNtk), 100.0*(pManRwr->nNodesBeg - pManRwr->nNodesEnd)/pManRwr->nNodesBeg);
+        fprintf(fLog, ", %9.2f, %9.2f", 1.0*((double)(timeDCSim + pManRwr->timeUpdate))/((double)CLOCKS_PER_SEC), 1.0*((double)(pManRwr->timeTotal))/((double)CLOCKS_PER_SEC));
+        fclose(fLog);
+    }
+
     if ( fVeryVerbose )
         Rwr_ScoresReport( pManRwr );
     // delete the managers

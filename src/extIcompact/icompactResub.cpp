@@ -115,7 +115,7 @@ extern abctime s_ResubTime;
 
 ***********************************************************************/
 extern "C" { void Dec_GraphUpdateNetwork( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int fUpdateLevel, int nGain ); }
-int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOdc, int fUpdateLevel, int fVerbose, int fVeryVerbose, char * simFileName )
+int ntkResubstitute( Abc_Ntk_t * pNtk, int nCutMax, int nStepsMax, int nLevelsOdc, int fUpdateLevel, int fVerbose, int fVeryVerbose, char * simFileName, char * logFileName )
 {
     // icompactGencareset.cpp
     extern void simFlipOneNode( unsigned int * uAlter, Fra_Sml_t * p, Aig_Obj_t * pObj);
@@ -238,6 +238,15 @@ pManRes->timeTotal = Abc_Clock() - clkStart;
     // print statistics
     if ( fVerbose )
         Abc_ManResubPrint2( pManRes );
+    
+    if(logFileName != NULL)
+    {
+        FILE * fLog = fopen(logFileName, "a");
+        fprintf(fLog, ", resub, %i, %i, %6.2f", Abc_NtkNodeNum(pNtk), Abc_NtkLevel(pNtk), 100.0*(pManRes->nNodesBeg-pManRes->nNodesEnd)/pManRes->nNodesBeg );
+        fprintf(fLog, ", %9.2f, %9.2f", 1.0*((double)(pManRes->timeSim))/((double)CLOCKS_PER_SEC), 1.0*((double)(pManRes->timeTotal))/((double)CLOCKS_PER_SEC));
+        fprintf(fLog, ", %i/ %i", pManRes->nUsedNodeC, pManRes->nUsedNode0);
+        fclose(fLog);
+    }
 
     // delete the managers
     Abc_ManResubStop( pManRes );

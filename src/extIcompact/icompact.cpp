@@ -859,6 +859,13 @@ clkStart = Abc_Clock();
     }
 
     // each po function
+    FILE * fLog = NULL;
+    if(_resultlogFileName != NULL)
+    {
+        fLog = fopen(_resultlogFileName, "a");
+        fprintf(fLog, "\n");
+    }
+        
     vector<int> fanInList;
     for(int poIdx=0; poIdx<_workingPo; poIdx++)
     {
@@ -877,6 +884,8 @@ clkStart = Abc_Clock();
             pNtkTmp = Abc_NtkStrash(pNtkTmp, 0, 0, 0);
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
             Abc_NtkDelete(pNtkTmp);
+            if(fLog)
+                fprintf(fLog, ", -1");                
         }
         else if(fanInList.size() == 1)
         {
@@ -886,6 +895,8 @@ clkStart = Abc_Clock();
             Abc_ObjAddFanin(pPo, pPi);
             if(!firstPatternTwoBits(_workingFileName, fanInList[0], _nPi + 1 + poIdx)) 
                 Abc_ObjSetFaninC(pPo, 0); // set complement
+            if(fLog)
+                fprintf(fLog, ", 0");    
         }
         else
         {
@@ -904,8 +915,13 @@ clkStart = Abc_Clock();
             writeCompactpla(new_pla);
             if(fskDT)
             {
-                char sysCommand[17 + strlen(_pathName) + 12 + 1];
-                sprintf(sysCommand, "python3 skDT.py %s %d", _pathName, poIdx);
+                char sysCommand[17 + strlen(_pathName) + 12 + 6 + 1];
+                if(fskDT==1)
+                    sprintf(sysCommand, "python3 skDT.py %s %d dt", _pathName, poIdx);
+                else if(fskDT==2)
+                    sprintf(sysCommand, "python3 skDT.py %s %d dgdo", _pathName, poIdx);
+                else
+                    sprintf(sysCommand, "python3 skDT.py %s %d fringe", _pathName, poIdx);
                 system(sysCommand);
                 pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
             }
@@ -918,6 +934,8 @@ clk = Abc_Clock();
             pNtkTmp = ntkMinimize(pNtkTmp, 1, 0); // use resyn2
 timeMin += Abc_Clock() - clk; 
             if(!ntkAppend(pNtk, pNtkTmp)) { _fMgr = CONSTRUCT_NTK_FAIL; Abc_NtkDelete(pNtkTmp); return NULL; }
+            if(fLog)
+                fprintf(fLog, ", %i", Abc_NtkNodeNum(pNtkTmp));  
             Abc_NtkDelete(pNtkTmp);
         }
     }
@@ -954,6 +972,8 @@ timeTotal = Abc_Clock() - clkStart;
         ABC_PRT("  Minimize   ", timeMin);
         ABC_PRT("  Total      ", timeTotal);
     }
+    if(fLog)
+        fclose(fLog);
 
     return pNtk;
 }

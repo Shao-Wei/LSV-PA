@@ -449,7 +449,7 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     IcompactMgr *mgr;
     // == Parse command ======================
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "sidvh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "sidovh" ) ) != EOF )
     {
         switch ( c )
         {            
@@ -463,7 +463,12 @@ static int ntkConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
                 globalUtilOptind++;
                 break;
             case 'd':
-                fskDT ^= 1;
+                fskDT = atoi(argv[globalUtilOptind]);
+                globalUtilOptind++;
+                break;
+            case 'o':
+                resultlogFileName = argv[globalUtilOptind];
+                globalUtilOptind++;
                 break;
             case 'v':
                 fVerbose ^= 1;
@@ -509,7 +514,7 @@ usage:
     Abc_Print( -2, "\t<base>                 : template name for intermidiate files\n" );
     Abc_Print( -2, "\t-i <num>               : set number of iteration [default = %f]\n", fIter);
     Abc_Print( -2, "\t-s <ref.blif>          : use support information from the reference ntkwork[default = %s]\n", (fSupport)? "yes": "no");
-    Abc_Print( -2, "\t-d                     : toggle using skDT to construct circuit [default = %d]\n", fskDT );
+    Abc_Print( -2, "\t-d <num>               : toggle using skDT to construct circuit. 0: no DT, 1: dt, 2: dgdo, 3: fringe [default = %d]\n", fskDT );
     Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
     Abc_Print( -2, "\t-h                     : print the command usage\n" );
     return 1;   
@@ -523,14 +528,19 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     FILE * pFile;
     Abc_Ntk_t *pNtk;
     char *verifyFileName;
+    char *logFileName = NULL;
 
     pNtk = Abc_FrameReadNtk(pAbc);
     // set defaults
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "ovh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'o':
+            logFileName = argv[globalUtilOptind];
+            globalUtilOptind++;
+            break;
         case 'v':
             fVerbose ^= 1;
             break;
@@ -564,7 +574,7 @@ static int ntkSignalMerge_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     }
     fclose(pFile);
 
-    pNtk = ntkSignalMerge(pNtk, verifyFileName, fVerbose);
+    pNtk = ntkSignalMerge(pNtk, verifyFileName, fVerbose, logFileName);
     Abc_FrameReplaceCurrentNetwork(pAbc, pNtk);
   
     return 0;
@@ -582,6 +592,7 @@ static int ntkResub_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv)
 {
     FILE * pFile;
     char *verifyFileName;
+    char *logFileName = NULL;
     Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
     int RS_CUT_MIN =  4;
     int RS_CUT_MAX = 16;
@@ -603,10 +614,14 @@ static int ntkResub_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv)
     fVerbose     =  0;
     fVeryVerbose =  0;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "KNFlzvwh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "oKNFlzvwh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'o':
+            logFileName = argv[globalUtilOptind];
+            globalUtilOptind++;
+            break;
         case 'K':
             if ( globalUtilOptind >= argc )
             {
@@ -703,7 +718,7 @@ static int ntkResub_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv)
     }
 
     // modify the current network
-    if ( !ntkResubstitute( pNtk, nCutsMax, nNodesMax, nLevelsOdc, fUpdateLevel, fVerbose, fVeryVerbose, verifyFileName ) )
+    if ( !ntkResubstitute( pNtk, nCutsMax, nNodesMax, nLevelsOdc, fUpdateLevel, fVerbose, fVeryVerbose, verifyFileName, logFileName ) )
     {
         Abc_Print( -1, "Resubstitute has failed.\n" );
         return 1;
@@ -743,6 +758,7 @@ static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
 
     FILE * pFile;
     char *simFileName;
+    char *logFileName = NULL;
 
     // set defaults
     fUpdateLevel = 1;
@@ -752,10 +768,14 @@ static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
     fVeryVerbose = 0;
     fPlaceEnable = 0;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "lxzvwh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "olxzvwh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'o':
+            logFileName = argv[globalUtilOptind];
+            globalUtilOptind++;
+            break;
         case 'l':
             fUpdateLevel ^= 1;
             break;
@@ -818,7 +838,7 @@ static int aigRewrite_Command( Abc_Frame_t * pAbc, int argc, char ** argv )
     }
 
     // modify the current network
-    if ( !ntkRewrite( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable, simFileName ) )
+    if ( !ntkRewrite( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable, simFileName, logFileName ) )
     {
         Abc_Print( -1, "Rewriting has failed.\n" );
         return 1;
