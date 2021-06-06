@@ -253,6 +253,7 @@ static int ntkverify_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
 {
     int result       = 0;
     int c            = 0;
+    int fVerbose     = 0;
 
     FILE * pFile;
     Abc_Ntk_t * pNtk;
@@ -261,10 +262,13 @@ static int ntkverify_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     pNtk = Abc_FrameReadNtk(pAbc);
     // set defaults
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 'v':
+            fVerbose ^= 1;
+            break;
         case 'h':
             goto usage;
         default:
@@ -298,75 +302,16 @@ static int ntkverify_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
     // icompactUtil.cpp
     if(!Abc_NtkIsStrash(pNtk))
         pNtk = Abc_NtkStrash(pNtk, 0, 0, 0);
-    ntkVerifySamples(pNtk, verifyFileName, 0);
+    ntkVerifySamples(pNtk, verifyFileName, fVerbose);
 
     return result;
     
 usage:
     Abc_Print( -2, "usage: verify [-h] <file>\n" );
     Abc_Print( -2, "\t         verify the circuit with given patterns\n" );
+    Abc_Print( -2, "\t-v     : verbosity [default = %d]\n", fVerbose );
     Abc_Print( -2, "\t-h     : print the command usage\n");
     Abc_Print( -2, "\t<file> : file with the given patterns\n");
-    return 1;
-}
-
-static int ntkMinimize_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
-{
-    int result       = 0;
-    int c            = 0;
-    int fCompress    = 0;
-    
-    int sizeOld = 0, sizeNew = 0;
-    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc);
-
-    char dc2Command[100]    = "dc2;";
-
-    // set defaults
-    Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "ch" ) ) != EOF )
-    {
-        switch ( c )
-        {
-        case 'c':
-            fCompress ^= 1;
-        case 'h':
-            goto usage;
-        default:
-            goto usage;
-        }
-    }
-
-    if ( pNtk == NULL )
-    {
-        Abc_Print( -1, "Empty network.\n" );
-        return 1;
-    }
-    if ( !Abc_NtkIsStrash(pNtk) )
-    {
-        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
-        return 1;
-    }
-
-    sizeOld = Abc_NtkNodeNum(pNtk);
-    while(1)
-    {
-        if(Cmd_CommandExecute(pAbc,dc2Command))
-        {
-            printf("Failed to execute minimize commands.\n");
-            return 1;
-        }
-        sizeNew = Abc_NtkNodeNum( Abc_FrameReadNtk(pAbc) );
-        if(sizeNew >= sizeOld)
-            break;
-        sizeOld = sizeNew;
-    }
-  
-    return result;
-    
-usage:
-    Abc_Print( -2, "usage: ntkmin [-h] \n" );
-    Abc_Print( -2, "\t         minimization scripts\n" );
-    Abc_Print( -2, "\t-h     : print the command usage\n");
     return 1;
 }
 
@@ -1277,13 +1222,90 @@ usage:
 }
 */
 
+static int findsupport_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    int result       = 0;
+    int c            = 0;
+
+    FILE * fLog;
+    char * logFileName;
+    Abc_Ntk_t * pNtk;
+    int nPi, nPo;
+    int * supportNum, * coneSize;
+
+    Abc_Ntk_t *pNtkCone;
+    Abc_Obj_t *pPo;
+    int poIdx, i;
+    // set defaults
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "h" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( argc != globalUtilOptind + 1 )
+    {
+        goto usage;
+    }
+    logFileName = argv[globalUtilOptind];
+
+    pNtk = Abc_FrameReadNtk(pAbc);
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+
+    nPi = Abc_NtkPiNum(pNtk);
+    nPo = Abc_NtkPoNum(pNtk);
+
+    // get support & cone
+    supportNum = new int[nPo];
+    coneSize = new int[nPo];
+
+    // derive support using cone
+    Abc_NtkForEachPo(pNtk, pPo, i)
+    {
+        pNtkCone = Abc_NtkCreateCone(pNtk, Abc_ObjFanin0(pPo), Abc_ObjName(pPo), 0);
+        supportNum[poIdx] = Abc_NtkPiNum(pNtkCone);
+        coneSize[poIdx] = Abc_NtkNodeNum(pNtkCone);
+    }
+
+    fLog = fopen(logFileName, "a");
+    fprintf(fLog, "%s\n", Abc_NtkName(pNtk));
+    for(i=0; i<nPo; i++)
+        fprintf(fLog, ", %i", coneSize[i]);
+    fprintf(fLog, "\n");
+    for(i=0; i<nPo; i++)
+        fprintf(fLog, ", %i", supportNum[i]);
+    fprintf(fLog, "\n");
+    fclose(fLog);
+
+    // cleanup
+    delete [] supportNum;
+    delete [] coneSize;
+
+    return result;
+    
+usage:
+    Abc_Print( -2, "usage: findsupport [-h] <log>\n" );
+    Abc_Print( -2, "\t         aux: reports support & cone size\n" );
+    Abc_Print( -2, "\t-h       : print the command usage\n");
+    return 1;
+}
+
 // called during ABC startup
 static void init(Abc_Frame_t* pAbc)
 { 
     Cmd_CommandAdd( pAbc, "AlCom", "gencareset", gencareset_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "compact", compact_Command, 1);
-    Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);
-    Cmd_CommandAdd( pAbc, "AlCom", "ntkmin", ntkMinimize_Command, 1);    
+    Cmd_CommandAdd( pAbc, "AlCom", "verify", ntkverify_Command, 1);  
     Cmd_CommandAdd( pAbc, "AlCom", "stfault", ntkSTFault_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkconstruct", ntkConstruct_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
@@ -1292,6 +1314,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "checkesp", checkesp_Command, 1);
 //    Cmd_CommandAdd( pAbc, "ALCom", "bddminimize", bddminimize_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "readplabatch", readplabatch_Command, 1); // helper
+    Cmd_CommandAdd( pAbc, "AlCom", "findsupport", findsupport_Command, 1);
 }
 
 // called during ABC termination

@@ -153,15 +153,13 @@ class DGDOFringe():
             fp.write('id1,id2,op\n')
             for id1, id2, op in feats:
                 fp.write('{},{},{}\n'.format(str(id1), str(id2), op))
-            
-        
+             
     def __getFringeFeats__(self, useBest=True):
         feats = self.fringeFeatsBest if useBest else self.fringeFeats
         feats = list(feats.items())
         feats.sort(key = lambda k: k[1])
         return [x[0] for x in feats]
-    
-        
+     
     def __fringeDetect__(self):
         dtree_ = self.dtree
         
@@ -242,8 +240,7 @@ class DGDOFringe():
             feat = (x, y, op)
             ret.add(feat)
         return ret
-        
-        
+          
     def __dataAug__(self, data, id1, id2, op):
         d1 = data.transpose()[id1]
         d2 = data.transpose()[id2]
@@ -285,15 +282,17 @@ class DGDOFringe():
         data = np.concatenate((data, res.T), axis=1)
         return data
         
-    def toBlif(self, fn, useBest=True):
+    def toBlif(self, fn, useBest=True, nLift=0, nLstOnly=False, piNameList=None):
         getFeatName = lambda x: 'x_' + str(x)
         getNodeName = lambda x: 'n_' + str(x)
+        if piNameList == None:
+            piNameList = [getFeatName(i) for i in range(self.nFeats)]
         
         def fringeFeatsExtract(fLst):
             feats = self.__getFringeFeats__(useBest)
             n = self.nFeats
             for id1, id2, op in feats:
-                names = [getFeatName(id1), getFeatName(id2), getFeatName(n)]
+                names = [piNameList[id1], piNameList[id2], piNameList[n]]
                 if op == 'x^y':
                     pats = ['10 1', '01 1']
                 elif op == 'x=y':
@@ -317,17 +316,17 @@ class DGDOFringe():
                 else: return
                 skTreeExtract(dtree_, dtree_.leftChild[nId], nLst,constructedNodes)    # 0-branch
                 skTreeExtract(dtree_, dtree_.rightChild[nId], nLst,constructedNodes)   # 1-branch
-                nNd = getNodeName(nId)
-                nC0 = getNodeName(dtree_.leftChild[nId])
-                nC1 = getNodeName(dtree_.rightChild[nId])
-                nCtrl = getFeatName(dtree_.var[nId])
+                nNd = getNodeName(nId + nLift)
+                nC0 = getNodeName(dtree_.leftChild[nId] + nLift)
+                nC1 = getNodeName(dtree_.rightChild[nId] + nLift)
+                nCtrl = piNameList[dtree_.var[nId]]
                 names = [nC0, nC1, nCtrl, nNd]
                 pats = ['-11 1', '1-0 1']
             else: # leaf node
                 if nId not in constructedNodes:
                     constructedNodes.add(nId)
                 else: return
-                names = [getNodeName(nId)]
+                names = [getNodeName(nId + nLift)]
                 val = dtree_.pred[nId]
                 pats = ['1'] if (val == 1) else []
             nLst.append((names, pats))  
@@ -339,17 +338,19 @@ class DGDOFringe():
         constructedNodes=set()
         fringeFeatsExtract(nLst)
         skTreeExtract(dtree_, 0, nLst,constructedNodes)
+        if nLstOnly == True:
+            return nLst
         
-        fp = open(fn, 'w')
+        fp = open(fn + '.blif', 'w')
         fp.write('.model FringeTree\n')
         fp.write('.inputs ')
-        fp.write(' '.join([getFeatName(i) for i in range(self.nFeats)]))
+        fp.write(' '.join(piNameList))
         fp.write('\n.outputs y\n')
         for names, pats in nLst:
             fp.write('.names {}\n'.format(' '.join(names)))
             for pat in pats:
                 fp.write(pat + '\n')
-        fp.write('.names {} y\n1 1\n.end\n'.format(getNodeName(0)))
+        fp.write('.names {} y\n1 1\n.end\n'.format(getNodeName(0 + nLift)))
         fp.close()
 
     def saveWOData(self,filename):
