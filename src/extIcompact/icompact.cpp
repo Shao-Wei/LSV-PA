@@ -838,9 +838,11 @@ Abc_Ntk_t * IcompactMgr::constructNtkEach(bool **minMaskList, int fskDT, int fVe
     extern bool firstPatternOneBit(char * pFileName, int idx);
     extern bool firstPatternTwoBits(char * pFileName, int piIdx, int poIdx);
     
-    Abc_Ntk_t * pNtk, * pNtkTmp;
+    Abc_Ntk_t * pNtk, * pNtkTmp, * pNtkTmp1, * pNtkTmp2;
     Abc_Obj_t * pPi, * pPo;
     abctime clk, clkStart = Abc_Clock(), timeMin = 0, timeTotal = 0;
+    int fringeCount = 0;
+    int unused __attribute__((unused)); // get rid of system warnings
 
     strncpy(_workingFileName, _samplesplaFileName, 500);
     _litWorkingPi = _litPi;
@@ -869,6 +871,7 @@ clkStart = Abc_Clock();
     vector<int> fanInList;
     for(int poIdx=0; poIdx<_workingPo; poIdx++)
     {
+        printf("poIdx = %i\n", poIdx);
         fanInList.clear();
         for(int piIdx=0; piIdx<_workingPi; piIdx++)
             if(minMaskList[poIdx][piIdx]) { fanInList.push_back(piIdx); }
@@ -917,13 +920,49 @@ clkStart = Abc_Clock();
             {
                 char sysCommand[17 + strlen(_pathName) + 12 + 6 + 1];
                 if(fskDT==1)
+                {
                     sprintf(sysCommand, "python3 skDT.py %s %d dt", _pathName, poIdx);
+                    unused = system(sysCommand);
+                    pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                }   
                 else if(fskDT==2)
+                {
                     sprintf(sysCommand, "python3 skDT.py %s %d dgdo", _pathName, poIdx);
-                else
+                    unused = system(sysCommand);
+                    pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                } 
+                else if(fskDT==3)
+                {
                     sprintf(sysCommand, "python3 skDT.py %s %d fringe", _pathName, poIdx);
-                system(sysCommand);
-                pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                    unused = system(sysCommand);
+                    pNtkTmp = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                }
+                else
+                {
+                    sprintf(sysCommand, "python3 dtRecur.py %s %d fringe", _pathName, poIdx);
+                    unused = system(sysCommand);
+                    pNtkTmp1 = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                    pNtkTmp1 = Abc_NtkStrash(pNtkTmp1, 0, 0, 0);
+                    pNtkTmp1 = ntkMinimize(pNtkTmp1, 1, 0); // use resyn2
+                    sprintf(sysCommand, "python3 skDT.py %s %d dt", _pathName, poIdx);
+                    unused = system(sysCommand);
+                    pNtkTmp2 = Io_Read(new_blif, Io_ReadFileType(new_blif), 1, 0);
+                    pNtkTmp2 = Abc_NtkStrash(pNtkTmp2, 0, 0, 0);
+                    pNtkTmp2 = ntkMinimize(pNtkTmp2, 1, 0); // use resyn2
+                    printf("  fringe / dt: %i / %i\n", Abc_NtkNodeNum(pNtkTmp1), Abc_NtkNodeNum(pNtkTmp2));
+                    if(Abc_NtkNodeNum(pNtkTmp1) < Abc_NtkNodeNum(pNtkTmp2))
+                    {
+                        fringeCount++;
+                        printf("fringe\n");
+                        pNtkTmp = pNtkTmp1;
+                        Abc_NtkDelete(pNtkTmp2);
+                    }
+                    else
+                    {
+                        pNtkTmp = pNtkTmp2;
+                        Abc_NtkDelete(pNtkTmp1);
+                    }
+                }
             }
             else
             {
@@ -969,6 +1008,7 @@ timeTotal = Abc_Clock() - clkStart;
     if(fVerbose)
     {
         printf( "> Construct Ntk Statistics:\n");
+        printf( "  Fringe subcircuit: %i / %i\n", fringeCount, _workingPo);
         ABC_PRT("  Minimize   ", timeMin);
         ABC_PRT("  Total      ", timeTotal);
     }

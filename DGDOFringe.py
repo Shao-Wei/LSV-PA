@@ -282,7 +282,7 @@ class DGDOFringe():
         data = np.concatenate((data, res.T), axis=1)
         return data
         
-    def toBlif(self, fn, useBest=True, nLift=0, nLstOnly=False, piNameList=None):
+    def fringeExtract(self, useBest=True, piNameList=None, nLift=0):
         getFeatName = lambda x: 'x_' + str(x)
         getNodeName = lambda x: 'n_' + str(x)
         if piNameList == None:
@@ -338,20 +338,7 @@ class DGDOFringe():
         constructedNodes=set()
         fringeFeatsExtract(nLst)
         skTreeExtract(dtree_, 0, nLst,constructedNodes)
-        if nLstOnly == True:
-            return nLst
-        
-        fp = open(fn + '.blif', 'w')
-        fp.write('.model FringeTree\n')
-        fp.write('.inputs ')
-        fp.write(' '.join(piNameList))
-        fp.write('\n.outputs y\n')
-        for names, pats in nLst:
-            fp.write('.names {}\n'.format(' '.join(names)))
-            for pat in pats:
-                fp.write(pat + '\n')
-        fp.write('.names {} y\n1 1\n.end\n'.format(getNodeName(0 + nLift)))
-        fp.close()
+        return nLst
 
     def saveWOData(self,filename):
         self.dtree.data=None

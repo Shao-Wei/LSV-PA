@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import matplotlib
 import pickle
-from sk2Blif import sk2Blif
+from sk2Blif import fringe2Blif, sk2Blif
 from DGDO import DGDO
 from DGDOFringe import DGDOFringe
 
@@ -82,7 +82,7 @@ if __name__ == '__main__':
         #count=sum(dg.predict(trainData)==trainLabel)
         #trainAcc=count/nSampleTrain
         #print('train acc:',trainAcc)
-        dg.toBlif('{}/{}'.format(target,poNum))
+        fringe2Blif(nVar, piNameList, poName, dg, '{}/{}'.format(target,poNum))
     else:
         print("Warning! Cannot parse the construction type. Options: dt, dgdo, fringe")
 

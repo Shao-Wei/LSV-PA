@@ -51,7 +51,23 @@ def sk2Blif(nPi, piNameList, poName, model, oFn):
     elif type(model) == RandomForestClassifier:
         for i, dt in enumerate(model.estimators_):
             skTree2Blif(nPi, piNameList, poName, dt.tree_, oFn+str(i)+'.blif')
-        
+
+def fringe2Blif(nPi, piNameList, poName, dtree, oFn):
+    fp = open(oFn+'.blif', 'w')
+    fp.write('.model skTree\n')
+    fp.write('.inputs ')
+    fp.write(' '.join(piNameList))
+    fp.write('\n.outputs ' + poName + '\n')
+
+    nLst = dtree.fringeExtract(True, piNameList, 0)
+    for names, pats in nLst:
+        fp.write('.names {}\n'.format(' '.join(names)))
+        for pat in pats:
+            fp.write(pat + '\n')
+            
+    fp.write('.names {} {}\n1 1\n.end\n'.format(getNodeName(0), poName))
+    fp.close()
+
 # skTreeList2Blif: convert sklearn models into combinational circuits in BLIF format
 #   - nPi: number of primary inputs
 #   - piNameList: list of names of primary inputs
@@ -67,10 +83,10 @@ def skTreeList2Blif(nPi, piNameList, poName, dtList, oFn):
 
     nLift = 0
     for dtree in reversed(dtList):
-        print("nLift = " + str(nLift))
+#         print("nLift = " + str(nLift))
         if type(dtree) == DGDOFringe:
             nCount = dtree.dtreeBest.nodeCount # this is wrong
-            nLst = dtree.toBlif(None, True, nLift, True, piNameList)
+            nLst = dtree.fringeExtract(True, piNameList, nLift)
             for names, pats in nLst:
                 fp.write('.names {}\n'.format(' '.join(names)))
                 for pat in pats:
