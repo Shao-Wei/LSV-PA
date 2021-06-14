@@ -283,7 +283,7 @@ class DGDOFringe():
         return data
         
     def fringeExtract(self, useBest=True, piNameList=None, nLift=0):
-        getFeatName = lambda x: 'x_' + str(x)
+        getFeatName = lambda x: 'f_' + str(x)
         getNodeName = lambda x: 'n_' + str(x)
         if piNameList == None:
             piNameList = [getFeatName(i) for i in range(self.nFeats)]
