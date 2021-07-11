@@ -9,3 +9,5 @@ SRC += src/extIcompact/icompactExperiment.cpp
 SRC += src/extIcompact/icompactResub.cpp
 SRC += src/extIcompact/icompactDReduce.cpp
 SRC += src/extIcompact/icompactOSDT.cpp
+SRC += src/extIcompact/icompactSA.cpp
+

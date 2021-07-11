@@ -6,6 +6,7 @@
 #include <vector>
 #include"icompactDReduce.h"
 #include"icompactOSDT.h" 
+#include"icompactSA.h" 
 
 ABC_NAMESPACE_IMPL_START
 
@@ -581,6 +582,66 @@ static int ntkOSDTConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv
     return 0;
 usage:
     Abc_Print( -2, "usage: ntkOSDTconstruct [options] <pla>\n" );
+    Abc_Print( -2, "\t                       construct ntk using OSDT\n" );
+    Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
+    Abc_Print( -2, "\t-h                     : print the command usage\n" );
+    return 1;   
+}
+
+static int ntkSAConstruct_Command( Abc_Frame_t_ * pAbc, int argc, char ** argv )
+{
+    // == Options ================
+    int c            = 0;
+    int fVerbose     = 0;
+
+    // == Overall declaration ================
+    char* fileName;
+    FILE *fTest;
+    IcompactSAMgr * mgr;
+
+    // == Parse command ======================
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "vh" ) ) != EOF )
+    {
+        switch ( c )
+        {            
+            case 'v':
+                fVerbose ^= 1;
+                break;
+            case 'h':
+                goto usage;
+            default:
+                goto usage;
+        }
+    }
+    if(argc != globalUtilOptind + 1)
+    {
+        printf("Missing arguements\n");
+        goto usage;
+    }
+    fileName = argv[globalUtilOptind];
+
+    if ( (fTest = fopen( fileName, "r" )) == NULL )
+    {
+        Abc_Print( -1, "Cannot open input file \"%s\". ", fileName );
+        if ( (fileName = Extra_FileGetSimilarName( fileName, ".mv", ".blif", ".pla", ".eqn", ".bench" )) )
+            Abc_Print( 1, "Did you mean \"%s\"?", fileName );
+        Abc_Print( 1, "\n" );
+        return 1;
+    }
+    fclose(fTest);
+
+    /////////////////////////////////////////////////////////
+    // Start Main
+    /////////////////////////////////////////////////////////
+    mgr = new IcompactSAMgr(fileName);
+    mgr->trainInit(fVerbose);
+    mgr->writeBlif("testOut.blif");
+    delete mgr;
+
+    return 0;
+usage:
+    Abc_Print( -2, "usage: ntkSAconstruct [options] <pla>\n" );
     Abc_Print( -2, "\t                       construct ntk using OSDT\n" );
     Abc_Print( -2, "\t-v                     : verbosity [default = %d]\n", fVerbose );
     Abc_Print( -2, "\t-h                     : print the command usage\n" );
@@ -1432,6 +1493,7 @@ static void init(Abc_Frame_t* pAbc)
     Cmd_CommandAdd( pAbc, "AlCom", "ntkconstruct", ntkConstruct_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkDRconstruct", ntkDRConstruct_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkOSDTconstruct", ntkOSDTConstruct_Command, 1);
+    Cmd_CommandAdd( pAbc, "AlCom", "ntkSAconstruct", ntkSAConstruct_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "signalmerge", ntkSignalMerge_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "aigrewrite", aigRewrite_Command, 1);
     Cmd_CommandAdd( pAbc, "AlCom", "ntkresub", ntkResub_Command, 1);
